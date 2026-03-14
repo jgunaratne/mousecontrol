@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import Speech
 
 /// The main prompt window view — where the user enters a task and sees AI progress.
 struct PromptView: View {
@@ -104,10 +105,34 @@ struct PromptView: View {
     
     private var promptSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("What should I do on the PC?")
-                .font(.headline)
+            HStack {
+                Text("What should I do on the PC?")
+                    .font(.headline)
+                Spacer()
+                // Model selector
+                Picker("", selection: $viewModel.selectedModel) {
+                    ForEach(AIManager.availableModels, id: \.self) { model in
+                        Text(Self.shortModelName(model)).tag(model)
+                    }
+                }
+                .pickerStyle(.menu)
+                .frame(maxWidth: 180)
+                .onChange(of: viewModel.selectedModel) { newModel in
+                    viewModel.onModelChanged?(newModel)
+                }
+            }
             
             HStack(spacing: 8) {
+                // Mic toggle button
+                Button(action: { viewModel.toggleVoice() }) {
+                    Image(systemName: viewModel.isVoiceActive ? "mic.fill" : "mic")
+                        .font(.title3)
+                        .foregroundColor(viewModel.isVoiceActive ? .red : .secondary)
+                }
+                .buttonStyle(.borderless)
+                .help(viewModel.isVoiceActive ? "Stop listening" : "Voice input")
+                .disabled(viewModel.isRunning)
+                
                 TextField("e.g., Open Firefox and search for 'Swift tutorials'", text: $viewModel.prompt)
                     .textFieldStyle(.roundedBorder)
                     .disabled(viewModel.isRunning)
@@ -146,6 +171,16 @@ struct PromptView: View {
                     .font(.caption)
                     .foregroundColor(viewModel.isError ? .red : .secondary)
             }
+        }
+    }
+    
+    /// Short display name for a model ID.
+    private static func shortModelName(_ model: String) -> String {
+        switch model {
+        case "gemini-3.1-pro-preview": return "3.1 Pro"
+        case "gemini-3.1-pro-preview-customtools": return "3.1 Pro (Custom Tools)"
+        case "gemini-3.1-flash-preview": return "3.1 Flash"
+        default: return model
         }
     }
     
@@ -224,6 +259,11 @@ class PromptViewModel: ObservableObject {
     @Published var stepCount: Int = 0
     @Published var projectIDInput: String = ""
     @Published var isProjectConfigured: Bool = false
+    @Published var selectedModel: String = AIManager.availableModels[0]
+    @Published var isVoiceActive: Bool = false
+    
+    /// Speech manager for voice input.
+    let speechManager = SpeechManager()
     
     /// Called by the UI to start a new task.
     var onStartTask: ((String) -> Void)?
@@ -231,13 +271,39 @@ class PromptViewModel: ObservableObject {
     /// Called by the UI to stop the current task.
     var onStopTask: (() -> Void)?
     
+    /// Called when the user changes the model selection.
+    var onModelChanged: ((String) -> Void)?
+    
     func startTask() {
         guard !prompt.isEmpty else { return }
+        // Stop voice if active
+        if isVoiceActive {
+            speechManager.stopListening()
+            isVoiceActive = false
+        }
         onStartTask?(prompt)
     }
     
     func stopTask() {
         onStopTask?()
+    }
+    
+    func toggleVoice() {
+        if isVoiceActive {
+            speechManager.stopListening()
+            isVoiceActive = false
+        } else {
+            // Set up callbacks
+            speechManager.onTranscription = { [weak self] text in
+                self?.prompt = text
+            }
+            speechManager.onFinalResult = { [weak self] text in
+                self?.prompt = text
+                self?.isVoiceActive = false
+            }
+            speechManager.startListening()
+            isVoiceActive = true
+        }
     }
     
     func saveProjectID() {

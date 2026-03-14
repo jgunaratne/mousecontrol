@@ -20,5 +20,9 @@
     <string>Copyright © 2026. All rights reserved.</string>
     <key>LSUIElement</key>
     <false/>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>MouseControl uses your microphone for voice input to describe tasks.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>MouseControl uses speech recognition to convert your voice commands to text.</string>
 </dict>
 </plist>

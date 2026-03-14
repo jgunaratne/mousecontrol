@@ -45,8 +45,15 @@ class AIManager {
         !projectID.isEmpty
     }
     
-    /// The Gemini model to use — 3.1 Pro Preview via Vertex AI.
-    private let model = "gemini-3.1-pro-preview"
+    /// Available Gemini models (matching juni-cli's GENAI_MODELS).
+    static let availableModels = [
+        "gemini-3.1-pro-preview",
+        "gemini-3.1-pro-preview-customtools",
+        "gemini-3.1-flash-preview",
+    ]
+    
+    /// The currently selected Gemini model.
+    var model: String = "gemini-3.1-pro-preview"
     
     /// Preview models require the 'global' location.
     private let location = "global"
@@ -295,8 +302,9 @@ class AIManager {
                     return
                 }
                 
-                // Concatenate text from all parts (thinking models split text + thoughtSignature)
-                let text = parts.compactMap { $0["text"] as? String }.joined()
+                // Use the LAST text part — thinking models put reasoning first, answer last
+                let textParts = parts.compactMap { $0["text"] as? String }
+                let text = textParts.last ?? ""
                 
                 guard !text.isEmpty else {
                     let finishReason = firstCandidate["finishReason"] as? String ?? "unknown"
@@ -342,8 +350,9 @@ class AIManager {
     
     // MARK: - Action Parsing
     
-    /// Extract the first complete JSON object from a string using bracket counting.
-    private func extractFirstJSON(_ str: String) -> String? {
+    /// Extract ALL complete JSON objects from a string using bracket counting.
+    private func extractAllJSON(_ str: String) -> [String] {
+        var results: [String] = []
         var depth = 0
         var start = -1
         for (i, char) in str.enumerated() {
@@ -355,11 +364,12 @@ class AIManager {
                 if depth == 0 && start >= 0 {
                     let startIdx = str.index(str.startIndex, offsetBy: start)
                     let endIdx = str.index(str.startIndex, offsetBy: i + 1)
-                    return String(str[startIdx..<endIdx])
+                    results.append(String(str[startIdx..<endIdx]))
+                    start = -1
                 }
             }
         }
-        return nil
+        return results
     }
     
     private func parseAction(_ jsonString: String) throws -> ControlMessage {
@@ -371,38 +381,36 @@ class AIManager {
             cleaned = filtered.joined(separator: "\n")
         }
         
-        // Use bracket counting to extract the first JSON object
-        guard let jsonStr = extractFirstJSON(cleaned) else {
-            print("❌ [parseAction] extractFirstJSON returned nil from: \(String(cleaned.prefix(300)))")
-            throw AIError.invalidAction
-        }
-        print("🔵 [parseAction] Extracted JSON: \(String(jsonStr.prefix(500)))")
-        
-        guard let data = jsonStr.data(using: .utf8) else {
-            print("❌ [parseAction] Could not convert to UTF8 data")
-            throw AIError.invalidAction
+        // Try parsing the entire text as JSON first
+        if let data = cleaned.data(using: .utf8),
+           let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let actionStr = dict["action"] as? String,
+           let actionType = ActionType(rawValue: actionStr) {
+            print("🔵 [parseAction] Parsed entire text as action: \(actionType.rawValue)")
+            return buildActionMessage(dict: dict, actionType: actionType)
         }
         
-        let obj = try JSONSerialization.jsonObject(with: data)
-        guard let dict = obj as? [String: Any] else {
-            print("❌ [parseAction] JSON is not a dictionary: \(type(of: obj))")
-            throw AIError.invalidAction
+        // Extract all JSON objects and find one with an "action" key
+        let jsonObjects = extractAllJSON(cleaned)
+        print("🔵 [parseAction] Found \(jsonObjects.count) JSON objects in text")
+        
+        for (index, jsonStr) in jsonObjects.enumerated() {
+            guard let data = jsonStr.data(using: .utf8),
+                  let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let actionStr = dict["action"] as? String,
+                  let actionType = ActionType(rawValue: actionStr) else {
+                print("🔵 [parseAction] JSON object \(index) is not a valid action: \(String(jsonStr.prefix(100)))")
+                continue
+            }
+            print("🔵 [parseAction] Found action in JSON object \(index): \(actionType.rawValue)")
+            return buildActionMessage(dict: dict, actionType: actionType)
         }
         
-        print("🔵 [parseAction] Parsed dict keys: \(dict.keys.sorted())")
-        
-        guard let actionStr = dict["action"] as? String else {
-            print("❌ [parseAction] No 'action' key in dict. Keys: \(dict.keys.sorted())")
-            throw AIError.invalidAction
-        }
-        
-        guard let actionType = ActionType(rawValue: actionStr) else {
-            print("❌ [parseAction] Unknown action type: '\(actionStr)'")
-            throw AIError.invalidAction
-        }
-        
-        print("🔵 [parseAction] Action: \(actionType.rawValue)")
-        
+        print("❌ [parseAction] No valid action found in any JSON object. Full text: \(String(cleaned.prefix(500)))")
+        throw AIError.invalidAction
+    }
+    
+    private func buildActionMessage(dict: [String: Any], actionType: ActionType) -> ControlMessage {
         return ControlMessage.executeAction(
             action: actionType,
             normalizedX: dict["normalizedX"] as? Double,

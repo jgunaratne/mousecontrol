@@ -46,6 +46,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         viewModel.onStopTask = { [weak self] in
             self?.stopAITask()
         }
+        viewModel.onModelChanged = { [weak self] newModel in
+            self?.aiManager.model = newModel
+            print("🔵 [MouseControl] Model changed to: \(newModel)")
+        }
         
         // 2. Set up the status bar
         statusBar.setup()
