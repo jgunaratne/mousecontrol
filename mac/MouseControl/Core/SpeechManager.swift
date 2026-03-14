@@ -21,13 +21,7 @@ class SpeechManager: NSObject, ObservableObject {
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     
-    /// Timer that fires after silence to auto-submit.
-    private var silenceTimer: Timer?
-    
-    /// How long to wait after the last speech before auto-submitting (seconds).
-    private let silenceTimeout: TimeInterval = 1.5
-    
-    /// The latest transcription text (used when silence timer fires).
+    /// The latest transcription text (used when stopping).
     private var latestTranscription: String = ""
     
     override init() {
@@ -92,14 +86,10 @@ class SpeechManager: NSObject, ObservableObject {
                 
                 DispatchQueue.main.async {
                     self.onTranscription?(transcription)
-                    // Reset the silence timer on each new transcription
-                    self.resetSilenceTimer()
                 }
                 
                 if result.isFinal {
                     DispatchQueue.main.async {
-                        self.silenceTimer?.invalidate()
-                        self.silenceTimer = nil
                         self.onFinalResult?(transcription)
                         self.stopListening()
                     }
@@ -137,8 +127,6 @@ class SpeechManager: NSObject, ObservableObject {
     }
     
     func stopListening() {
-        silenceTimer?.invalidate()
-        silenceTimer = nil
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
         recognitionRequest?.endAudio()
@@ -146,24 +134,16 @@ class SpeechManager: NSObject, ObservableObject {
         recognitionTask?.cancel()
         recognitionTask = nil
         
+        // Deliver the latest transcription as the final result
+        let finalText = latestTranscription
+        latestTranscription = ""
+        
         DispatchQueue.main.async {
             self.isListening = false
+            if !finalText.isEmpty {
+                self.onFinalResult?(finalText)
+            }
         }
         print("🎤 [Speech] Listening stopped")
     }
-    
-    // MARK: - Silence Timer
-    
-    /// Reset the silence timer — fires after `silenceTimeout` seconds of no new speech.
-    private func resetSilenceTimer() {
-        silenceTimer?.invalidate()
-        silenceTimer = Timer.scheduledTimer(withTimeInterval: silenceTimeout, repeats: false) { [weak self] _ in
-            guard let self = self, self.isListening else { return }
-            print("🎤 [Speech] Silence detected — auto-submitting")
-            let text = self.latestTranscription
-            self.onFinalResult?(text)
-            self.stopListening()
-        }
-    }
 }
-

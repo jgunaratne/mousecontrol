@@ -276,11 +276,6 @@ class PromptViewModel: ObservableObject {
     
     func startTask() {
         guard !prompt.isEmpty else { return }
-        // Stop voice if active
-        if isVoiceActive {
-            speechManager.stopListening()
-            isVoiceActive = false
-        }
         onStartTask?(prompt)
     }
     
@@ -290,6 +285,7 @@ class PromptViewModel: ObservableObject {
     
     func toggleVoice() {
         if isVoiceActive {
+            // Stop listening — this will fire onFinalResult → startTask
             speechManager.stopListening()
             isVoiceActive = false
         } else {
@@ -300,7 +296,7 @@ class PromptViewModel: ObservableObject {
             speechManager.onFinalResult = { [weak self] text in
                 self?.prompt = text
                 self?.isVoiceActive = false
-                // Auto-start the task when speech ends
+                // Auto-start the task when mic is stopped
                 if !text.isEmpty {
                     self?.startTask()
                 }
