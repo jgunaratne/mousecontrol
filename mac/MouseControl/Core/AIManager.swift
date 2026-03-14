@@ -236,7 +236,7 @@ class AIManager {
             "contents": contents,
             "generationConfig": [
                 "temperature": 0.1,
-                "maxOutputTokens": 500,
+                "maxOutputTokens": 2048,
                 "responseMimeType": "application/json"
             ]
         ]
@@ -421,40 +421,37 @@ class AIManager {
             }
         }
         
-        // Try 2: Find {"action" marker and extract the JSON object from there
-        let markers = ["{\"action\"", "{ \"action\"", "{\\n  \"action\"", "{\n  \"action\"", "{\n    \"action\""]
-        for marker in markers {
-            guard let markerRange = cleaned.range(of: marker) else { continue }
-            let fromMarker = String(cleaned[markerRange.lowerBound...])
-            
-            // Use string-aware bracket counting to find the complete JSON object
+        // Try 2: Find any JSON object containing an "action" key
+        // Scan every '{' and try bracket counting to extract complete JSON
+        let chars = Array(cleaned)
+        for startPos in 0..<chars.count where chars[startPos] == "{" {
             var depth = 0
-            var inString = false
-            var prevChar: Character = "\0"
-            var endIndex = 0
+            var inStr = false
+            var prev: Character = "\0"
+            var endPos = 0
             
-            for (i, char) in fromMarker.enumerated() {
-                if char == "\"" && prevChar != "\\" { inString = !inString }
-                if !inString {
-                    if char == "{" { depth += 1 }
-                    else if char == "}" {
+            for j in startPos..<chars.count {
+                let c = chars[j]
+                if c == "\"" && prev != "\\" { inStr = !inStr }
+                if !inStr {
+                    if c == "{" { depth += 1 }
+                    else if c == "}" {
                         depth -= 1
-                        if depth == 0 { endIndex = i + 1; break }
+                        if depth == 0 { endPos = j + 1; break }
                     }
                 }
-                prevChar = char
+                prev = c
             }
             
-            if endIndex > 0 {
-                let jsonStr = String(fromMarker.prefix(endIndex))
-                if let data = jsonStr.data(using: .utf8),
-                   let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let actionStr = dict["action"] as? String,
-                   let actionType = normalizeActionType(actionStr) {
-                    print("🔵 [parseAction] Marker extraction: \(actionType.rawValue) (from '\(actionStr)')")
-                    return buildActionMessage(dict: dict, actionType: actionType)
-                }
-            }
+            guard endPos > startPos else { continue }
+            let candidate = String(chars[startPos..<endPos])
+            guard let cData = candidate.data(using: .utf8),
+                  let dict = try? JSONSerialization.jsonObject(with: cData) as? [String: Any],
+                  let actionStr = dict["action"] as? String,
+                  let actionType = normalizeActionType(actionStr) else { continue }
+            
+            print("\u{1F535} [parseAction] Extracted at pos \(startPos): \(actionType.rawValue) (from '\(actionStr)')")
+            return buildActionMessage(dict: dict, actionType: actionType)
         }
         
         print("❌ [parseAction] All parse methods failed. Text (\(cleaned.count) chars): \(String(cleaned.prefix(500)))")
