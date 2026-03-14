@@ -303,37 +303,15 @@ class AIManager {
                     return
                 }
                 
-                // Extract text parts — try each as action JSON (thinking models have multiple parts)
+                // Concatenate all text parts — parseAction will handle finding the JSON
                 let textParts = parts.compactMap { $0["text"] as? String }
+                let text = textParts.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+                print("🔵 [AIManager] \(textParts.count) text parts, total \(text.count) chars")
                 
-                guard !textParts.isEmpty else {
+                guard !text.isEmpty else {
                     let finishReason = firstCandidate["finishReason"] as? String ?? "unknown"
                     print("❌ [AIManager] No text in response, finishReason: \(finishReason)")
                     completion(.failure(AIError.apiError("Empty response (finishReason: \(finishReason))")))
-                    return
-                }
-                
-                // Try each part individually as a valid action JSON
-                var text = ""
-                for part in textParts {
-                    let trimmed = part.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if let data = trimmed.data(using: .utf8),
-                       let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                       dict["action"] != nil {
-                        text = trimmed
-                        print("🔵 [AIManager] Found action JSON in part: \(String(trimmed.prefix(100)))")
-                        break
-                    }
-                }
-                
-                // Fallback: use last text part if no part parsed as action JSON
-                if text.isEmpty {
-                    text = textParts.last ?? ""
-                    print("🔵 [AIManager] No part was pure action JSON, using last part: \(String(text.prefix(100)))")
-                }
-                
-                guard !text.isEmpty else {
-                    completion(.failure(AIError.apiError("Empty response")))
                     return
                 }
                 
@@ -429,34 +407,58 @@ class AIManager {
         let filtered = lines.filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("```") }
         cleaned = filtered.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
         
-        // Parse JSON
-        guard let data = cleaned.data(using: .utf8),
-              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            // Fallback: try to find JSON substring
-            if let startRange = cleaned.range(of: "{"),
-               let jsonSubstring = cleaned[startRange.lowerBound...].data(using: .utf8),
-               let dict = try? JSONSerialization.jsonObject(with: jsonSubstring, options: .fragmentsAllowed) as? [String: Any],
-               let actionStr = dict["action"] as? String,
-               let actionType = normalizeActionType(actionStr) {
-                print("🔵 [parseAction] Parsed via substring: \(actionType.rawValue)")
-                return buildActionMessage(dict: dict, actionType: actionType)
+        // Try 1: Parse entire text as JSON
+        if let data = cleaned.data(using: .utf8) {
+            do {
+                if let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let actionStr = dict["action"] as? String,
+                   let actionType = normalizeActionType(actionStr) {
+                    print("🔵 [parseAction] Direct parse: \(actionType.rawValue)")
+                    return buildActionMessage(dict: dict, actionType: actionType)
+                }
+            } catch {
+                print("🔵 [parseAction] Direct parse failed: \(error.localizedDescription)")
             }
-            print("❌ [parseAction] Could not parse JSON. Text: \(String(cleaned.prefix(500)))")
-            throw AIError.parseError(cleaned)
         }
         
-        guard let actionStr = dict["action"] as? String else {
-            print("❌ [parseAction] No 'action' key. Keys: \(dict.keys.sorted())")
-            throw AIError.parseError(cleaned)
+        // Try 2: Find {"action" marker and extract the JSON object from there
+        let markers = ["{\"action\"", "{ \"action\"", "{\\n  \"action\"", "{\n  \"action\"", "{\n    \"action\""]
+        for marker in markers {
+            guard let markerRange = cleaned.range(of: marker) else { continue }
+            let fromMarker = String(cleaned[markerRange.lowerBound...])
+            
+            // Use string-aware bracket counting to find the complete JSON object
+            var depth = 0
+            var inString = false
+            var prevChar: Character = "\0"
+            var endIndex = 0
+            
+            for (i, char) in fromMarker.enumerated() {
+                if char == "\"" && prevChar != "\\" { inString = !inString }
+                if !inString {
+                    if char == "{" { depth += 1 }
+                    else if char == "}" {
+                        depth -= 1
+                        if depth == 0 { endIndex = i + 1; break }
+                    }
+                }
+                prevChar = char
+            }
+            
+            if endIndex > 0 {
+                let jsonStr = String(fromMarker.prefix(endIndex))
+                if let data = jsonStr.data(using: .utf8),
+                   let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let actionStr = dict["action"] as? String,
+                   let actionType = normalizeActionType(actionStr) {
+                    print("🔵 [parseAction] Marker extraction: \(actionType.rawValue) (from '\(actionStr)')")
+                    return buildActionMessage(dict: dict, actionType: actionType)
+                }
+            }
         }
         
-        guard let actionType = normalizeActionType(actionStr) else {
-            print("❌ [parseAction] Unknown action type: '\(actionStr)'")
-            throw AIError.parseError("Unknown action: \(actionStr) — Raw: \(String(cleaned.prefix(300)))")
-        }
-        
-        print("🔵 [parseAction] Action: \(actionType.rawValue) (from '\(actionStr)')")
-        return buildActionMessage(dict: dict, actionType: actionType)
+        print("❌ [parseAction] All parse methods failed. Text (\(cleaned.count) chars): \(String(cleaned.prefix(500)))")
+        throw AIError.parseError(cleaned)
     }
     
     private func buildActionMessage(dict: [String: Any], actionType: ActionType) -> ControlMessage {
