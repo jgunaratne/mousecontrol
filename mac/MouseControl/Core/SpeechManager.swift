@@ -24,6 +24,10 @@ class SpeechManager: NSObject, ObservableObject {
     /// The latest transcription text (used when stopping).
     private var latestTranscription: String = ""
     
+    /// Timer that fires after silence to auto-submit.
+    private var silenceTimer: Timer?
+    private let silenceTimeout: TimeInterval = 2.0
+    
     override init() {
         super.init()
         checkAuthorization()
@@ -86,6 +90,7 @@ class SpeechManager: NSObject, ObservableObject {
                 
                 DispatchQueue.main.async {
                     self.onTranscription?(transcription)
+                    self.resetSilenceTimer()
                 }
                 
                 if result.isFinal {
@@ -127,6 +132,8 @@ class SpeechManager: NSObject, ObservableObject {
     }
     
     func stopListening() {
+        silenceTimer?.invalidate()
+        silenceTimer = nil
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
         recognitionRequest?.endAudio()
@@ -145,5 +152,16 @@ class SpeechManager: NSObject, ObservableObject {
             }
         }
         print("🎤 [Speech] Listening stopped")
+    }
+    
+    // MARK: - Silence Timer
+    
+    private func resetSilenceTimer() {
+        silenceTimer?.invalidate()
+        silenceTimer = Timer.scheduledTimer(withTimeInterval: silenceTimeout, repeats: false) { [weak self] _ in
+            guard let self = self, self.isListening else { return }
+            print("🎤 [Speech] Silence detected — auto-submitting")
+            self.stopListening()
+        }
     }
 }
