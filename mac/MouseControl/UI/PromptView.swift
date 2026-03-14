@@ -300,6 +300,10 @@ class PromptViewModel: ObservableObject {
             speechManager.onFinalResult = { [weak self] text in
                 self?.prompt = text
                 self?.isVoiceActive = false
+                // Auto-start the task when speech ends
+                if !text.isEmpty {
+                    self?.startTask()
+                }
             }
             speechManager.startListening()
             isVoiceActive = true
