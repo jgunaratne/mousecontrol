@@ -303,14 +303,37 @@ class AIManager {
                     return
                 }
                 
-                // Use the LAST text part — thinking models put reasoning first, answer last
+                // Extract text parts — try each as action JSON (thinking models have multiple parts)
                 let textParts = parts.compactMap { $0["text"] as? String }
-                let text = textParts.last ?? ""
+                
+                guard !textParts.isEmpty else {
+                    let finishReason = firstCandidate["finishReason"] as? String ?? "unknown"
+                    print("❌ [AIManager] No text in response, finishReason: \(finishReason)")
+                    completion(.failure(AIError.apiError("Empty response (finishReason: \(finishReason))")))
+                    return
+                }
+                
+                // Try each part individually as a valid action JSON
+                var text = ""
+                for part in textParts {
+                    let trimmed = part.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if let data = trimmed.data(using: .utf8),
+                       let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       dict["action"] != nil {
+                        text = trimmed
+                        print("🔵 [AIManager] Found action JSON in part: \(String(trimmed.prefix(100)))")
+                        break
+                    }
+                }
+                
+                // Fallback: use last text part if no part parsed as action JSON
+                if text.isEmpty {
+                    text = textParts.last ?? ""
+                    print("🔵 [AIManager] No part was pure action JSON, using last part: \(String(text.prefix(100)))")
+                }
                 
                 guard !text.isEmpty else {
-                    let finishReason = firstCandidate["finishReason"] as? String ?? "unknown"
-                    print("❌ [AIManager] Empty text in response, finishReason: \(finishReason)")
-                    completion(.failure(AIError.apiError("Empty response (finishReason: \(finishReason))")))
+                    completion(.failure(AIError.apiError("Empty response")))
                     return
                 }
                 

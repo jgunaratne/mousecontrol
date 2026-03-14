@@ -16,6 +16,7 @@
 		C9E1AB76AC3119FBABEC2355 /* StatusBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D15547B8A9AF2C020DFD492C /* StatusBarController.swift */; };
 		CED56E76814CACB6ED5EAA02 /* TCPManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0620B33F71E22C26E2AC7066 /* TCPManager.swift */; };
 		D8A1F34E2B7C9D00AABB1122 /* SpeechManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8A1F34F2B7C9D00AABB1133 /* SpeechManager.swift */; };
+		E1B2C45A3C8D0E11BBCC2233 /* LocalActionExecutor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1B2C45B3C8D0E11BBCC2244 /* LocalActionExecutor.swift */; };
 		F93A7B3CC9D0A9AC38D35925 /* MouseControlApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DA6BB2F169BE62C6437A43E /* MouseControlApp.swift */; };
 /* End PBXBuildFile section */
 
@@ -32,6 +33,7 @@
 		CEAE718CEC8692FDE76A47DB /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.15.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
 		D15547B8A9AF2C020DFD492C /* StatusBarController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StatusBarController.swift; sourceTree = "<group>"; };
 		D8A1F34F2B7C9D00AABB1133 /* SpeechManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpeechManager.swift; sourceTree = "<group>"; };
+		E1B2C45B3C8D0E11BBCC2244 /* LocalActionExecutor.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LocalActionExecutor.swift; sourceTree = "<group>"; };
 		E9FF08F5648BBCCA0B574D94 /* MouseControl.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MouseControl.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -121,6 +123,7 @@
 				A74FC95DB05CCD95DEE702F5 /* ControlEvent.swift */,
 				1D95625F9AB835FAFD3ACEEF /* AIManager.swift */,
 				D8A1F34F2B7C9D00AABB1133 /* SpeechManager.swift */,
+				E1B2C45B3C8D0E11BBCC2244 /* LocalActionExecutor.swift */,
 			);
 			name = Core;
 			path = Core;
@@ -197,6 +200,7 @@
 				93E35BC17B76FB6D9D5B8D38 /* PromptView.swift in Sources */,
 				C9E1AB76AC3119FBABEC2355 /* StatusBarController.swift in Sources */,
 				D8A1F34E2B7C9D00AABB1122 /* SpeechManager.swift in Sources */,
+				E1B2C45A3C8D0E11BBCC2233 /* LocalActionExecutor.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

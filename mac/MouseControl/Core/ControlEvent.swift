@@ -1,5 +1,13 @@
 import Foundation
 
+// MARK: - Control Target
+
+/// Whether MouseControl targets the remote PC or local Mac.
+enum ControlTarget {
+    case pc
+    case mac
+}
+
 // MARK: - Message Types
 
 /// Top-level message types exchanged between Mac and PC companion.

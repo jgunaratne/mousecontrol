@@ -106,9 +106,19 @@ struct PromptView: View {
     private var promptSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("What should I do on the PC?")
+                Text("What should I do on the \(viewModel.controlTarget == .pc ? "PC" : "Mac")?")
                     .font(.headline)
                 Spacer()
+                // PC / Mac toggle
+                Picker("", selection: $viewModel.controlTarget) {
+                    Text("PC").tag(ControlTarget.pc)
+                    Text("Mac").tag(ControlTarget.mac)
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 100)
+                .onChange(of: viewModel.controlTarget) { newTarget in
+                    viewModel.onTargetChanged?(newTarget)
+                }
                 // Model selector
                 Picker("", selection: $viewModel.selectedModel) {
                     ForEach(AIManager.availableModels, id: \.self) { model in
@@ -261,6 +271,7 @@ class PromptViewModel: ObservableObject {
     @Published var isProjectConfigured: Bool = false
     @Published var selectedModel: String = AIManager.availableModels[0]
     @Published var isVoiceActive: Bool = false
+    @Published var controlTarget: ControlTarget = .pc
     
     /// Speech manager for voice input.
     let speechManager = SpeechManager()
@@ -273,6 +284,9 @@ class PromptViewModel: ObservableObject {
     
     /// Called when the user changes the model selection.
     var onModelChanged: ((String) -> Void)?
+    
+    /// Called when the user changes the control target.
+    var onTargetChanged: ((ControlTarget) -> Void)?
     
     func startTask() {
         guard !prompt.isEmpty else { return }

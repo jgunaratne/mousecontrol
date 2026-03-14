@@ -10,6 +10,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private let tcpManager = TCPManager()
     private let aiManager = AIManager()
     private let statusBar = StatusBarController()
+    private let localExecutor = LocalActionExecutor()
+    
+    /// Current control target (PC or Mac).
+    private var controlTarget: ControlTarget = .pc
     
     /// The prompt view model — shared with the SwiftUI view.
     private let viewModel = PromptViewModel()
@@ -49,6 +53,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         viewModel.onModelChanged = { [weak self] newModel in
             self?.aiManager.model = newModel
             print("🔵 [MouseControl] Model changed to: \(newModel)")
+        }
+        viewModel.onTargetChanged = { [weak self] target in
+            self?.controlTarget = target
+            print("🔵 [MouseControl] Control target changed to: \(target == .mac ? "Mac" : "PC")")
         }
         
         // 2. Set up the status bar
@@ -110,13 +118,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     private func startAITask(prompt: String) {
         guard !isTaskRunning else { return }
-        guard tcpManager.isConnected else {
-            viewModel.statusMessage = "Not connected to companion PC"
+        // Check configuration
+        guard aiManager.isConfigured else {
+            viewModel.statusMessage = "Please configure GCP Project ID first"
             viewModel.isError = true
             return
         }
-        guard aiManager.isConfigured else {
-            viewModel.statusMessage = "GCP Project ID not configured"
+        
+        // For PC mode, require a TCP connection
+        if controlTarget == .pc && !tcpManager.isConnected {
+            viewModel.statusMessage = "Not connected to companion PC"
             viewModel.isError = true
             return
         }
@@ -167,99 +178,149 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         viewModel.stepCount += 1
         let step = viewModel.stepCount
         
-        // Step 1: Request screenshot from companion
+        // Step 1: Get screenshot (from companion or local)
         viewModel.statusMessage = "Requesting screenshot (step \(step))…"
         viewModel.addLogEntry("📸 Requesting screenshot…")
         
-        tcpManager.requestScreenshot { [weak self] screenshotMessage in
-            guard let self = self, self.isTaskRunning, !self.shouldCancelTask else { return }
-            
-            guard let base64 = screenshotMessage.imageBase64 else {
-                self.viewModel.addLogEntry("❌ Invalid screenshot data")
-                self.viewModel.statusMessage = "Failed to get screenshot"
-                self.viewModel.isError = true
-                self.stopAITask()
+        if controlTarget == .mac {
+            // Local Mac screenshot
+            guard let capture = localExecutor.captureScreenshot() else {
+                viewModel.addLogEntry("❌ Failed to capture Mac screenshot")
+                viewModel.statusMessage = "Failed to capture screenshot"
+                viewModel.isError = true
+                stopAITask()
                 return
             }
             
-            // Display the full-res screenshot
-            if let imageData = Data(base64Encoded: base64),
+            // Display screenshot
+            if let imageData = Data(base64Encoded: capture.base64),
                let image = NSImage(data: imageData) {
-                self.viewModel.latestScreenshot = image
-                self.viewModel.addLogEntry("📸 Screenshot received (\(screenshotMessage.width ?? 0)×\(screenshotMessage.height ?? 0))")
+                viewModel.latestScreenshot = image
+                viewModel.addLogEntry("📸 Screenshot received (\(capture.width)×\(capture.height))")
             }
             
-            // Step 2: Downscale screenshot for AI (4K is way too large)
-            self.viewModel.statusMessage = "AI analyzing screenshot (step \(step))…"
-            self.viewModel.addLogEntry("🤖 Sending to Gemini for analysis…")
+            // Analyze and execute locally
+            viewModel.statusMessage = "AI analyzing screenshot (step \(step))…"
+            viewModel.addLogEntry("🤖 Sending to Gemini for analysis…")
             
-            // Run AI analysis on a background queue (gcloud auth + request are blocking)
             DispatchQueue.global(qos: .userInitiated).async {
-                let resizedBase64 = self.resizeScreenshotForAI(base64)
+                let resizedBase64 = self.resizeScreenshotForAI(capture.base64)
                 
                 self.aiManager.analyzeScreenshot(prompt: prompt, screenshotBase64: resizedBase64) { [weak self] result in
                     DispatchQueue.main.async {
                         guard let self = self, self.isTaskRunning, !self.shouldCancelTask else { return }
-                        
-                        switch result {
-                        case .success(let actionMessage):
-                            guard let action = actionMessage.action else {
-                                self.viewModel.addLogEntry("❌ AI returned no action")
-                                self.stopAITask()
-                                return
-                            }
-                            
-                            // Check if the task is done
-                            if action == .done {
-                                let summary = actionMessage.summary ?? "Task completed"
-                                self.viewModel.addLogEntry("✅ Done: \(summary)")
-                                self.viewModel.statusMessage = summary
-                                self.isTaskRunning = false
-                                self.viewModel.isRunning = false
-                                if self.tcpManager.isConnected {
-                                    self.statusBar.updateState(.connected)
-                                }
-                                return
-                            }
-                            
-                            // Log the action
-                            self.logAction(actionMessage)
-                            
-                            // Check if it's a wait action (handled locally)
-                            if action == .wait {
-                                let waitTime = actionMessage.seconds ?? 1.0
-                                self.viewModel.statusMessage = "Waiting \(waitTime)s…"
-                                DispatchQueue.main.asyncAfter(deadline: .now() + waitTime) {
-                                    self.agentLoop(prompt: prompt)
-                                }
-                                return
-                            }
-                            
-                            // Step 3: Send action to companion
-                            self.viewModel.statusMessage = "Executing action (step \(step))…"
-                            
-                            self.tcpManager.executeAction(actionMessage) { [weak self] resultMessage in
-                                guard let self = self, self.isTaskRunning, !self.shouldCancelTask else { return }
-                                
-                                if resultMessage.success == false {
-                                    self.viewModel.addLogEntry("⚠️ Action failed: \(resultMessage.error ?? "unknown")")
-                                }
-                                
-                                // Brief pause before next iteration to let the screen update
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                                    self.agentLoop(prompt: prompt)
-                                }
-                            }
-                            
-                        case .failure(let error):
-                            self.viewModel.addLogEntry("❌ AI error: \(error.localizedDescription)")
-                            self.viewModel.statusMessage = "AI error: \(error.localizedDescription)"
-                            self.viewModel.isError = true
-                            self.stopAITask()
+                        self.handleAIResult(result, prompt: prompt, step: step)
+                    }
+                }
+            }
+        } else {
+            // Remote PC screenshot
+            tcpManager.requestScreenshot { [weak self] screenshotMessage in
+                guard let self = self, self.isTaskRunning, !self.shouldCancelTask else { return }
+                
+                guard let base64 = screenshotMessage.imageBase64 else {
+                    self.viewModel.addLogEntry("❌ Invalid screenshot data")
+                    self.viewModel.statusMessage = "Failed to get screenshot"
+                    self.viewModel.isError = true
+                    self.stopAITask()
+                    return
+                }
+                
+                // Display the full-res screenshot
+                if let imageData = Data(base64Encoded: base64),
+                   let image = NSImage(data: imageData) {
+                    self.viewModel.latestScreenshot = image
+                    self.viewModel.addLogEntry("📸 Screenshot received (\(screenshotMessage.width ?? 0)×\(screenshotMessage.height ?? 0))")
+                }
+                
+                // Step 2: Downscale screenshot for AI (4K is way too large)
+                self.viewModel.statusMessage = "AI analyzing screenshot (step \(step))…"
+                self.viewModel.addLogEntry("🤖 Sending to Gemini for analysis…")
+                
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let resizedBase64 = self.resizeScreenshotForAI(base64)
+                    
+                    self.aiManager.analyzeScreenshot(prompt: prompt, screenshotBase64: resizedBase64) { [weak self] result in
+                        DispatchQueue.main.async {
+                            guard let self = self, self.isTaskRunning, !self.shouldCancelTask else { return }
+                            self.handleAIResult(result, prompt: prompt, step: step)
                         }
                     }
                 }
             }
+        }
+    }
+    
+    /// Handle the AI result — shared between local and remote paths.
+    private func handleAIResult(_ result: Result<ControlMessage, Error>, prompt: String, step: Int) {
+        switch result {
+        case .success(let actionMessage):
+            guard let action = actionMessage.action else {
+                viewModel.addLogEntry("❌ AI returned no action")
+                stopAITask()
+                return
+            }
+            
+            // Check if the task is done
+            if action == .done {
+                let summary = actionMessage.summary ?? "Task completed"
+                viewModel.addLogEntry("✅ Done: \(summary)")
+                viewModel.statusMessage = summary
+                isTaskRunning = false
+                viewModel.isRunning = false
+                if tcpManager.isConnected {
+                    statusBar.updateState(.connected)
+                }
+                return
+            }
+            
+            // Log the action
+            logAction(actionMessage)
+            
+            // Wait action — handled locally
+            if action == .wait {
+                let waitTime = actionMessage.seconds ?? 1.0
+                viewModel.statusMessage = "Waiting \(waitTime)s…"
+                DispatchQueue.main.asyncAfter(deadline: .now() + waitTime) {
+                    self.agentLoop(prompt: prompt)
+                }
+                return
+            }
+            
+            // Execute action based on target
+            viewModel.statusMessage = "Executing action (step \(step))…"
+            
+            if controlTarget == .mac {
+                // Local Mac execution
+                localExecutor.execute(actionMessage) { [weak self] success, error in
+                    guard let self = self, self.isTaskRunning, !self.shouldCancelTask else { return }
+                    DispatchQueue.main.async {
+                        if !success {
+                            self.viewModel.addLogEntry("⚠️ Action failed: \(error ?? "unknown")")
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            self.agentLoop(prompt: prompt)
+                        }
+                    }
+                }
+            } else {
+                // Remote PC execution
+                tcpManager.executeAction(actionMessage) { [weak self] resultMessage in
+                    guard let self = self, self.isTaskRunning, !self.shouldCancelTask else { return }
+                    if resultMessage.success == false {
+                        self.viewModel.addLogEntry("⚠️ Action failed: \(resultMessage.error ?? "unknown")")
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        self.agentLoop(prompt: prompt)
+                    }
+                }
+            }
+            
+        case .failure(let error):
+            viewModel.addLogEntry("❌ AI error: \(error.localizedDescription)")
+            viewModel.statusMessage = "AI error: \(error.localizedDescription)"
+            viewModel.isError = true
+            stopAITask()
         }
     }
     
