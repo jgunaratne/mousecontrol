@@ -40,6 +40,8 @@ class LocalActionExecutor {
         switch actionType {
         case .click:
             executeClick(action, completion: completion)
+        case .drag:
+            executeDrag(action, completion: completion)
         case .mouseMove:
             executeMouseMove(action, completion: completion)
         case .type:
@@ -84,6 +86,54 @@ class LocalActionExecutor {
                 upEvent.setIntegerValueField(.mouseEventClickState, value: Int64(i))
                 upEvent.post(tap: .cghidEventTap)
             }
+        }
+        
+        completion(true, nil)
+    }
+    // MARK: - Mouse Move
+    
+    // MARK: - Drag
+    
+    private func executeDrag(_ action: ControlMessage, completion: @escaping (Bool, String?) -> Void) {
+        guard let sx = action.startX, let sy = action.startY,
+              let ex = action.endX, let ey = action.endY else {
+            completion(false, "Missing drag coordinates")
+            return
+        }
+        
+        let screenSize = NSScreen.main?.frame.size ?? CGSize(width: 1920, height: 1080)
+        let startPoint = CGPoint(x: CGFloat(sx) * screenSize.width, y: CGFloat(sy) * screenSize.height)
+        let endPoint = CGPoint(x: CGFloat(ex) * screenSize.width, y: CGFloat(ey) * screenSize.height)
+        
+        // Move to start
+        if let moveEvent = CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: startPoint, mouseButton: .left) {
+            moveEvent.post(tap: .cghidEventTap)
+        }
+        usleep(50_000) // 50ms
+        
+        // Mouse down at start
+        if let downEvent = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: startPoint, mouseButton: .left) {
+            downEvent.post(tap: .cghidEventTap)
+        }
+        usleep(50_000)
+        
+        // Drag to end (smooth interpolation)
+        let steps = 10
+        for i in 1...steps {
+            let t = CGFloat(i) / CGFloat(steps)
+            let point = CGPoint(
+                x: startPoint.x + (endPoint.x - startPoint.x) * t,
+                y: startPoint.y + (endPoint.y - startPoint.y) * t
+            )
+            if let dragEvent = CGEvent(mouseEventSource: nil, mouseType: .leftMouseDragged, mouseCursorPosition: point, mouseButton: .left) {
+                dragEvent.post(tap: .cghidEventTap)
+            }
+            usleep(10_000) // 10ms between steps
+        }
+        
+        // Mouse up at end
+        if let upEvent = CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: endPoint, mouseButton: .left) {
+            upEvent.post(tap: .cghidEventTap)
         }
         
         completion(true, nil)

@@ -25,6 +25,7 @@ enum ControlMessageType: String, Codable {
 enum ActionType: String, Codable {
     case mouseMove
     case click
+    case drag
     case type
     case keyCombo
     case scroll
@@ -86,6 +87,20 @@ struct ControlMessage: Codable {
     /// Summary message when action is "done".
     let summary: String?
     
+    // ── Drag fields (Mac → PC) ──────────────────────────────────────────
+    
+    /// Normalized start X for drag (0–1).
+    let startX: Double?
+    
+    /// Normalized start Y for drag (0–1).
+    let startY: Double?
+    
+    /// Normalized end X for drag (0–1).
+    let endX: Double?
+    
+    /// Normalized end Y for drag (0–1).
+    let endY: Double?
+    
     // ── Action result (PC → Mac) ────────────────────────────────────────
     
     /// Whether the action succeeded.
@@ -118,7 +133,11 @@ struct ControlMessage: Codable {
         scrollDeltaX: Double? = nil,
         scrollDeltaY: Double? = nil,
         seconds: Double? = nil,
-        summary: String? = nil
+        summary: String? = nil,
+        startX: Double? = nil,
+        startY: Double? = nil,
+        endX: Double? = nil,
+        endY: Double? = nil
     ) -> ControlMessage {
         ControlMessage(
             type: .executeAction,
@@ -136,6 +155,10 @@ struct ControlMessage: Codable {
             scrollDeltaY: scrollDeltaY,
             seconds: seconds,
             summary: summary,
+            startX: startX,
+            startY: startY,
+            endX: endX,
+            endY: endY,
             success: nil,
             error: nil
         )
@@ -158,6 +181,10 @@ struct ControlMessage: Codable {
         scrollDeltaY: Double? = nil,
         seconds: Double? = nil,
         summary: String? = nil,
+        startX: Double? = nil,
+        startY: Double? = nil,
+        endX: Double? = nil,
+        endY: Double? = nil,
         success: Bool? = nil,
         error: String? = nil
     ) {
@@ -176,6 +203,10 @@ struct ControlMessage: Codable {
         self.scrollDeltaY = scrollDeltaY
         self.seconds = seconds
         self.summary = summary
+        self.startX = startX
+        self.startY = startY
+        self.endX = endX
+        self.endY = endY
         self.success = success
         self.error = error
     }

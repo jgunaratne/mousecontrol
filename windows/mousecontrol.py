@@ -330,6 +330,45 @@ def inject_action(event: dict) -> dict:
             log.info("scroll → (dx=%s, dy=%s)", dx, dy)
             return {"success": True}
             
+        elif action == "drag":
+            sx = event.get("startX", 0.5)
+            sy = event.get("startY", 0.5)
+            ex = event.get("endX", 0.5)
+            ey = event.get("endY", 0.5)
+            
+            start_x = max(0, min(int(sx * SCREEN_WIDTH), SCREEN_WIDTH - 1))
+            start_y = max(0, min(int(sy * SCREEN_HEIGHT), SCREEN_HEIGHT - 1))
+            end_x = max(0, min(int(ex * SCREEN_WIDTH), SCREEN_WIDTH - 1))
+            end_y = max(0, min(int(ey * SCREEN_HEIGHT), SCREEN_HEIGHT - 1))
+            
+            # Move to start position
+            abs_sx = int(start_x * 65535 / (SCREEN_WIDTH - 1)) if SCREEN_WIDTH > 1 else 0
+            abs_sy = int(start_y * 65535 / (SCREEN_HEIGHT - 1)) if SCREEN_HEIGHT > 1 else 0
+            _send_mouse_input(MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE, dx=abs_sx, dy=abs_sy)
+            import time
+            time.sleep(0.05)
+            
+            # Mouse down
+            _send_mouse_input(MOUSEEVENTF_LEFTDOWN)
+            time.sleep(0.05)
+            
+            # Drag in steps for smooth movement
+            steps = 10
+            for i in range(1, steps + 1):
+                t = i / steps
+                ix = int(start_x + (end_x - start_x) * t)
+                iy = int(start_y + (end_y - start_y) * t)
+                abs_ix = int(ix * 65535 / (SCREEN_WIDTH - 1)) if SCREEN_WIDTH > 1 else 0
+                abs_iy = int(iy * 65535 / (SCREEN_HEIGHT - 1)) if SCREEN_HEIGHT > 1 else 0
+                _send_mouse_input(MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE, dx=abs_ix, dy=abs_iy)
+                time.sleep(0.01)
+            
+            # Mouse up
+            _send_mouse_input(MOUSEEVENTF_LEFTUP)
+            
+            log.info("drag → (%d,%d) to (%d,%d)", start_x, start_y, end_x, end_y)
+            return {"success": True}
+            
         elif action in ("wait", "done", None):
             return {"success": True}
             

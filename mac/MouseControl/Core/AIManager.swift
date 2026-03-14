@@ -88,7 +88,10 @@ class AIManager {
     - Press a key combination. Key names: ctrl, alt, shift, super, enter, tab, escape, backspace, delete, up, down, left, right, home, end, pageup, pagedown, f1-f12, space, plus any single character.
     
     {"action": "scroll", "deltaX": 0, "deltaY": -3}
-    - Scroll. Positive deltaY = scroll up, negative = scroll down.
+    - Scroll the mouse wheel. Negative deltaY = scroll down, positive = scroll up.
+    
+    {"action": "drag", "startX": 0.3, "startY": 0.5, "endX": 0.7, "endY": 0.8}
+    - Click and drag from (startX, startY) to (endX, endY). Use for drawing, resizing, selecting text, etc.
     
     {"action": "wait", "seconds": 1.0}
     - Wait for something to load or animate.
@@ -386,6 +389,11 @@ class AIManager {
         case "scroll", "scrolldown", "scrollup", "scrollleft", "scrollright":
             return .scroll
             
+        // Drag variants
+        case "drag", "clickanddrag", "mousedrag", "dragto", "draganddrop",
+             "dragdrop":
+            return .drag
+            
         // Wait variants
         case "wait", "sleep", "pause", "delay":
             return .wait
@@ -485,7 +493,11 @@ class AIManager {
             scrollDeltaX: dict["deltaX"] as? Double ?? dict["scrollDeltaX"] as? Double,
             scrollDeltaY: scrollDY,
             seconds: dict["seconds"] as? Double ?? dict["duration"] as? Double,
-            summary: dict["summary"] as? String ?? dict["message"] as? String
+            summary: dict["summary"] as? String ?? dict["message"] as? String,
+            startX: dict["startX"] as? Double,
+            startY: dict["startY"] as? Double,
+            endX: dict["endX"] as? Double,
+            endY: dict["endY"] as? Double
         )
     }
 }
