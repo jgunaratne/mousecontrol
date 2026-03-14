@@ -109,10 +109,24 @@ class AIManager {
             return token
         }
         
+        // Find gcloud — Xcode-launched apps have a minimal PATH, so check common locations.
+        let gcloudPaths = [
+            "\(FileManager.default.homeDirectoryForCurrentUser.path)/google-cloud-sdk/bin/gcloud",
+            "/opt/homebrew/bin/gcloud",
+            "/usr/local/bin/gcloud",
+            "/usr/bin/gcloud",
+        ]
+        
+        let gcloudPath = gcloudPaths.first { FileManager.default.isExecutableFile(atPath: $0) }
+        
+        guard let resolvedPath = gcloudPath else {
+            throw AIError.authError("gcloud not found. Install Google Cloud SDK or run: brew install google-cloud-sdk")
+        }
+        
         let process = Process()
         let pipe = Pipe()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["gcloud", "auth", "print-access-token"]
+        process.executableURL = URL(fileURLWithPath: resolvedPath)
+        process.arguments = ["auth", "print-access-token"]
         process.standardOutput = pipe
         process.standardError = FileHandle.nullDevice
         
@@ -166,8 +180,8 @@ class AIManager {
             return
         }
         
-        // Vertex AI endpoint — preview models use 'global' region
-        let urlString = "https://\(location)-aiplatform.googleapis.com/v1beta1/projects/\(projectID)/locations/\(location)/publishers/google/models/\(model):generateContent"
+        // Vertex AI endpoint — use aiplatform.googleapis.com (NOT {location}-aiplatform)
+        let urlString = "https://aiplatform.googleapis.com/v1beta1/projects/\(projectID)/locations/\(location)/publishers/google/models/\(model):generateContent"
         
         guard let url = URL(string: urlString) else {
             completion(.failure(AIError.invalidResponse))
@@ -195,10 +209,10 @@ class AIManager {
             parts.append(["text": "Here is the updated screenshot after the previous action. Continue with the next step to complete the task. Return the next action as JSON."])
         }
         
-        // Add the screenshot as inline_data
+        // Add the screenshot as inline_data (JPEG after resizing)
         parts.append([
             "inlineData": [
-                "mimeType": "image/png",
+                "mimeType": "image/jpeg",
                 "data": screenshotBase64
             ]
         ])
@@ -221,7 +235,10 @@ class AIManager {
         
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
+            print("🔵 [AIManager] Request URL: \(urlString)")
+            print("🔵 [AIManager] Request body size: \(request.httpBody?.count ?? 0) bytes")
         } catch {
+            print("❌ [AIManager] Failed to serialize request body: \(error)")
             completion(.failure(error))
             return
         }
@@ -229,13 +246,16 @@ class AIManager {
         // Send the request
         URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             if let error = error {
+                print("❌ [AIManager] Network error: \(error)")
                 completion(.failure(error))
                 return
             }
             
             // Check HTTP status
-            if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 401 {
-                // Token expired — clear cache and retry
+            let httpStatus = (response as? HTTPURLResponse)?.statusCode ?? 0
+            print("🔵 [AIManager] HTTP status: \(httpStatus)")
+            
+            if httpStatus == 401 {
                 self?.cachedAccessToken = nil
                 self?.tokenExpiry = .distantPast
                 completion(.failure(AIError.authError("Access token expired. Will retry on next call.")))
@@ -247,8 +267,13 @@ class AIManager {
                 return
             }
             
+            // Debug: print raw response
+            let rawResponse = String(data: data, encoding: .utf8) ?? "<non-utf8>"
+            print("🔵 [AIManager] Response (\(data.count) bytes): \(String(rawResponse.prefix(2000)))")
+            
             do {
                 guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                    print("❌ [AIManager] Response is not a JSON dictionary")
                     completion(.failure(AIError.invalidResponse))
                     return
                 }
@@ -260,36 +285,53 @@ class AIManager {
                     return
                 }
                 
-                // Extract the response text
+                // Extract the response text — thinking models may have multiple parts
                 guard let candidates = json["candidates"] as? [[String: Any]],
                       let firstCandidate = candidates.first,
                       let content = firstCandidate["content"] as? [String: Any],
-                      let parts = content["parts"] as? [[String: Any]],
-                      let firstPart = parts.first,
-                      let text = firstPart["text"] as? String else {
+                      let parts = content["parts"] as? [[String: Any]] else {
+                    print("❌ [AIManager] Could not extract candidates/parts from response")
                     completion(.failure(AIError.invalidResponse))
                     return
                 }
                 
-                // Parse the action JSON
-                let action = try self?.parseAction(text)
+                // Concatenate text from all parts (thinking models split text + thoughtSignature)
+                let text = parts.compactMap { $0["text"] as? String }.joined()
                 
-                // Update conversation history
-                self?.conversationHistory.append(contentsOf: contents.suffix(1))  // user turn
-                self?.conversationHistory.append([
-                    "role": "model",
-                    "parts": [["text": text]]
-                ])
-                
-                // Keep history manageable (last 10 turns = 20 entries)
-                if let count = self?.conversationHistory.count, count > 20 {
-                    self?.conversationHistory = Array(self?.conversationHistory.suffix(20) ?? [])
+                guard !text.isEmpty else {
+                    let finishReason = firstCandidate["finishReason"] as? String ?? "unknown"
+                    print("❌ [AIManager] Empty text in response, finishReason: \(finishReason)")
+                    completion(.failure(AIError.apiError("Empty response (finishReason: \(finishReason))")))
+                    return
                 }
                 
-                if let action = action {
-                    completion(.success(action))
-                } else {
-                    completion(.failure(AIError.invalidAction))
+                print("🔵 [AIManager] AI response text: \(String(text.prefix(500)))")
+                
+                // Parse the action JSON
+                do {
+                    let action = try self?.parseAction(text)
+                    
+                    // Update conversation history
+                    self?.conversationHistory.append(contentsOf: contents.suffix(1))  // user turn
+                    self?.conversationHistory.append([
+                        "role": "model",
+                        "parts": [["text": text]]
+                    ])
+                    
+                    // Keep history manageable (last 10 turns = 20 entries)
+                    if let count = self?.conversationHistory.count, count > 20 {
+                        self?.conversationHistory = Array(self?.conversationHistory.suffix(20) ?? [])
+                    }
+                    
+                    if let action = action {
+                        completion(.success(action))
+                    } else {
+                        completion(.failure(AIError.invalidAction))
+                    }
+                } catch {
+                    print("❌ [AIManager] Parse error: \(error)")
+                    print("❌ [AIManager] Raw text (500 chars): \(String(text.prefix(500)))")
+                    completion(.failure(AIError.parseError("\(error) — Raw: \(String(text.prefix(200)))")))
                 }
                 
             } catch {
@@ -329,14 +371,37 @@ class AIManager {
             cleaned = filtered.joined(separator: "\n")
         }
         
-        // Use bracket counting to extract the first JSON object (robust against extra text)
-        guard let jsonStr = extractFirstJSON(cleaned),
-              let data = jsonStr.data(using: .utf8),
-              let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let actionStr = dict["action"] as? String,
-              let actionType = ActionType(rawValue: actionStr) else {
+        // Use bracket counting to extract the first JSON object
+        guard let jsonStr = extractFirstJSON(cleaned) else {
+            print("❌ [parseAction] extractFirstJSON returned nil from: \(String(cleaned.prefix(300)))")
             throw AIError.invalidAction
         }
+        print("🔵 [parseAction] Extracted JSON: \(String(jsonStr.prefix(500)))")
+        
+        guard let data = jsonStr.data(using: .utf8) else {
+            print("❌ [parseAction] Could not convert to UTF8 data")
+            throw AIError.invalidAction
+        }
+        
+        let obj = try JSONSerialization.jsonObject(with: data)
+        guard let dict = obj as? [String: Any] else {
+            print("❌ [parseAction] JSON is not a dictionary: \(type(of: obj))")
+            throw AIError.invalidAction
+        }
+        
+        print("🔵 [parseAction] Parsed dict keys: \(dict.keys.sorted())")
+        
+        guard let actionStr = dict["action"] as? String else {
+            print("❌ [parseAction] No 'action' key in dict. Keys: \(dict.keys.sorted())")
+            throw AIError.invalidAction
+        }
+        
+        guard let actionType = ActionType(rawValue: actionStr) else {
+            print("❌ [parseAction] Unknown action type: '\(actionStr)'")
+            throw AIError.invalidAction
+        }
+        
+        print("🔵 [parseAction] Action: \(actionType.rawValue)")
         
         return ControlMessage.executeAction(
             action: actionType,
@@ -361,6 +426,7 @@ enum AIError: LocalizedError {
     case noResponse
     case invalidResponse
     case invalidAction
+    case parseError(String)
     case apiError(String)
     case authError(String)
     
@@ -374,6 +440,9 @@ enum AIError: LocalizedError {
             return "Could not parse Vertex AI response."
         case .invalidAction:
             return "AI returned an invalid or unparseable action."
+        case .parseError(let rawText):
+            let preview = String(rawText.prefix(200))
+            return "Could not parse AI response as action: \(preview)"
         case .apiError(let message):
             return "Vertex AI error: \(message)"
         case .authError(let message):

@@ -178,76 +178,81 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
             
-            // Display the screenshot
+            // Display the full-res screenshot
             if let imageData = Data(base64Encoded: base64),
                let image = NSImage(data: imageData) {
                 self.viewModel.latestScreenshot = image
                 self.viewModel.addLogEntry("📸 Screenshot received (\(screenshotMessage.width ?? 0)×\(screenshotMessage.height ?? 0))")
             }
             
-            // Step 2: Send to AI for analysis
+            // Step 2: Downscale screenshot for AI (4K is way too large)
             self.viewModel.statusMessage = "AI analyzing screenshot (step \(step))…"
             self.viewModel.addLogEntry("🤖 Sending to Gemini for analysis…")
             
-            self.aiManager.analyzeScreenshot(prompt: prompt, screenshotBase64: base64) { [weak self] result in
-                DispatchQueue.main.async {
-                    guard let self = self, self.isTaskRunning, !self.shouldCancelTask else { return }
-                    
-                    switch result {
-                    case .success(let actionMessage):
-                        guard let action = actionMessage.action else {
-                            self.viewModel.addLogEntry("❌ AI returned no action")
+            // Run AI analysis on a background queue (gcloud auth + request are blocking)
+            DispatchQueue.global(qos: .userInitiated).async {
+                let resizedBase64 = self.resizeScreenshotForAI(base64)
+                
+                self.aiManager.analyzeScreenshot(prompt: prompt, screenshotBase64: resizedBase64) { [weak self] result in
+                    DispatchQueue.main.async {
+                        guard let self = self, self.isTaskRunning, !self.shouldCancelTask else { return }
+                        
+                        switch result {
+                        case .success(let actionMessage):
+                            guard let action = actionMessage.action else {
+                                self.viewModel.addLogEntry("❌ AI returned no action")
+                                self.stopAITask()
+                                return
+                            }
+                            
+                            // Check if the task is done
+                            if action == .done {
+                                let summary = actionMessage.summary ?? "Task completed"
+                                self.viewModel.addLogEntry("✅ Done: \(summary)")
+                                self.viewModel.statusMessage = summary
+                                self.isTaskRunning = false
+                                self.viewModel.isRunning = false
+                                if self.tcpManager.isConnected {
+                                    self.statusBar.updateState(.connected)
+                                }
+                                return
+                            }
+                            
+                            // Log the action
+                            self.logAction(actionMessage)
+                            
+                            // Check if it's a wait action (handled locally)
+                            if action == .wait {
+                                let waitTime = actionMessage.seconds ?? 1.0
+                                self.viewModel.statusMessage = "Waiting \(waitTime)s…"
+                                DispatchQueue.main.asyncAfter(deadline: .now() + waitTime) {
+                                    self.agentLoop(prompt: prompt)
+                                }
+                                return
+                            }
+                            
+                            // Step 3: Send action to companion
+                            self.viewModel.statusMessage = "Executing action (step \(step))…"
+                            
+                            self.tcpManager.executeAction(actionMessage) { [weak self] resultMessage in
+                                guard let self = self, self.isTaskRunning, !self.shouldCancelTask else { return }
+                                
+                                if resultMessage.success == false {
+                                    self.viewModel.addLogEntry("⚠️ Action failed: \(resultMessage.error ?? "unknown")")
+                                }
+                                
+                                // Brief pause before next iteration to let the screen update
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                    self.agentLoop(prompt: prompt)
+                                }
+                            }
+                            
+                        case .failure(let error):
+                            self.viewModel.addLogEntry("❌ AI error: \(error.localizedDescription)")
+                            self.viewModel.statusMessage = "AI error: \(error.localizedDescription)"
+                            self.viewModel.isError = true
                             self.stopAITask()
-                            return
                         }
-                        
-                        // Check if the task is done
-                        if action == .done {
-                            let summary = actionMessage.summary ?? "Task completed"
-                            self.viewModel.addLogEntry("✅ Done: \(summary)")
-                            self.viewModel.statusMessage = summary
-                            self.isTaskRunning = false
-                            self.viewModel.isRunning = false
-                            if self.tcpManager.isConnected {
-                                self.statusBar.updateState(.connected)
-                            }
-                            return
-                        }
-                        
-                        // Log the action
-                        self.logAction(actionMessage)
-                        
-                        // Check if it's a wait action (handled locally)
-                        if action == .wait {
-                            let waitTime = actionMessage.seconds ?? 1.0
-                            self.viewModel.statusMessage = "Waiting \(waitTime)s…"
-                            DispatchQueue.main.asyncAfter(deadline: .now() + waitTime) {
-                                self.agentLoop(prompt: prompt)
-                            }
-                            return
-                        }
-                        
-                        // Step 3: Send action to companion
-                        self.viewModel.statusMessage = "Executing action (step \(step))…"
-                        
-                        self.tcpManager.executeAction(actionMessage) { [weak self] resultMessage in
-                            guard let self = self, self.isTaskRunning, !self.shouldCancelTask else { return }
-                            
-                            if resultMessage.success == false {
-                                self.viewModel.addLogEntry("⚠️ Action failed: \(resultMessage.error ?? "unknown")")
-                            }
-                            
-                            // Brief pause before next iteration to let the screen update
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                                self.agentLoop(prompt: prompt)
-                            }
-                        }
-                        
-                    case .failure(let error):
-                        self.viewModel.addLogEntry("❌ AI error: \(error.localizedDescription)")
-                        self.viewModel.statusMessage = "AI error: \(error.localizedDescription)"
-                        self.viewModel.isError = true
-                        self.stopAITask()
                     }
                 }
             }
@@ -282,6 +287,66 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         case .done:
             viewModel.addLogEntry("✅ \(message.summary ?? "Done")")
         }
+    }
+    
+    // MARK: - Screenshot Resizing
+    
+    /// Downscale a base64 PNG screenshot to a smaller JPEG for AI analysis.
+    /// 4K (3840×2160) screenshots produce ~8MB base64 — this reduces to ~200-400KB.
+    private func resizeScreenshotForAI(_ base64PNG: String) -> String {
+        guard let imageData = Data(base64Encoded: base64PNG),
+              let image = NSImage(data: imageData) else {
+            print("⚠️ [AIManager] Could not decode screenshot for resizing")
+            return base64PNG  // Fall back to original
+        }
+        
+        let originalSize = image.size
+        let maxWidth: CGFloat = 1280
+        
+        // Only downscale if wider than maxWidth
+        let scale: CGFloat
+        if originalSize.width > maxWidth {
+            scale = maxWidth / originalSize.width
+        } else {
+            scale = 1.0
+        }
+        
+        let newSize = NSSize(
+            width: originalSize.width * scale,
+            height: originalSize.height * scale
+        )
+        
+        // Draw into a new bitmap
+        guard let bitmapRep = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: Int(newSize.width),
+            pixelsHigh: Int(newSize.height),
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: 0,
+            bitsPerPixel: 0
+        ) else {
+            print("⚠️ [AIManager] Could not create bitmap for resizing")
+            return base64PNG
+        }
+        
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmapRep)
+        image.draw(in: NSRect(origin: .zero, size: newSize))
+        NSGraphicsContext.restoreGraphicsState()
+        
+        // Encode as JPEG (much smaller than PNG)
+        guard let jpegData = bitmapRep.representation(using: .jpeg, properties: [.compressionFactor: 0.7]) else {
+            print("⚠️ [AIManager] Could not encode JPEG")
+            return base64PNG
+        }
+        
+        let resizedBase64 = jpegData.base64EncodedString()
+        print("🔵 [AIManager] Screenshot resized: \(Int(originalSize.width))×\(Int(originalSize.height)) → \(Int(newSize.width))×\(Int(newSize.height)), \(base64PNG.count / 1024)KB → \(resizedBase64.count / 1024)KB")
+        return resizedBase64
     }
     
     // MARK: - USB-C Interface Detection
