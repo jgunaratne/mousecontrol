@@ -26,8 +26,8 @@ struct PromptView: View {
             // Main content
             VStack(spacing: 12) {
                 // API Key field (only shown if not configured)
-                if !viewModel.isAPIKeyConfigured {
-                    apiKeySection
+                if !viewModel.isProjectConfigured {
+                    projectIDSection
                 }
                 
                 // Prompt input
@@ -70,18 +70,22 @@ struct PromptView: View {
         )
     }
     
-    private var apiKeySection: some View {
+    private var projectIDSection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Label("Gemini API Key Required", systemImage: "key.fill")
+            Label("GCP Project ID Required", systemImage: "cloud.fill")
                 .font(.caption.bold())
                 .foregroundColor(.orange)
             
+            Text("Uses Gemini 3.1 Pro Preview via Vertex AI. Run `gcloud auth application-default login` first.")
+                .font(.caption2)
+                .foregroundColor(.secondary)
+            
             HStack {
-                SecureField("Paste your Gemini API key…", text: $viewModel.apiKeyInput)
+                TextField("your-gcp-project-id", text: $viewModel.projectIDInput)
                     .textFieldStyle(.roundedBorder)
                 
                 Button("Save") {
-                    viewModel.saveAPIKey()
+                    viewModel.saveProjectID()
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
@@ -124,7 +128,7 @@ struct PromptView: View {
                         Label("Run", systemImage: "play.fill")
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(viewModel.prompt.isEmpty || !viewModel.isConnected || !viewModel.isAPIKeyConfigured)
+                    .disabled(viewModel.prompt.isEmpty || !viewModel.isConnected || !viewModel.isProjectConfigured)
                 }
             }
             
@@ -218,8 +222,8 @@ class PromptViewModel: ObservableObject {
     @Published var latestScreenshot: NSImage?
     @Published var actionLog: [String] = []
     @Published var stepCount: Int = 0
-    @Published var apiKeyInput: String = ""
-    @Published var isAPIKeyConfigured: Bool = false
+    @Published var projectIDInput: String = ""
+    @Published var isProjectConfigured: Bool = false
     
     /// Called by the UI to start a new task.
     var onStartTask: ((String) -> Void)?
@@ -236,12 +240,12 @@ class PromptViewModel: ObservableObject {
         onStopTask?()
     }
     
-    func saveAPIKey() {
-        guard !apiKeyInput.isEmpty else { return }
+    func saveProjectID() {
+        guard !projectIDInput.isEmpty else { return }
         let aiManager = AIManager()
-        aiManager.apiKey = apiKeyInput
-        isAPIKeyConfigured = true
-        apiKeyInput = ""
+        aiManager.projectID = projectIDInput
+        isProjectConfigured = true
+        projectIDInput = ""
     }
     
     func addLogEntry(_ entry: String) {

@@ -39,7 +39,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 1. Set up the prompt view model callbacks
-        viewModel.isAPIKeyConfigured = aiManager.isConfigured
+        viewModel.isProjectConfigured = aiManager.isConfigured
         viewModel.onStartTask = { [weak self] prompt in
             self?.startAITask(prompt: prompt)
         }
@@ -112,7 +112,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         guard aiManager.isConfigured else {
-            viewModel.statusMessage = "Gemini API key not configured"
+            viewModel.statusMessage = "GCP Project ID not configured"
             viewModel.isError = true
             return
         }

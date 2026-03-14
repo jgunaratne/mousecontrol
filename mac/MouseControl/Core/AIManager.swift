@@ -1,29 +1,39 @@
 import Foundation
 
-/// Manages communication with the Google Gemini API for vision-based screen analysis.
+/// Manages communication with Gemini 3.1 Pro Preview via Vertex AI for vision-based screen analysis.
 /// Sends screenshots + prompts and receives structured JSON actions.
+///
+/// Authentication: uses `gcloud auth print-access-token` (ADC) — ensure you have
+/// run `gcloud auth application-default login` on the Mac.
 class AIManager {
     
-    /// The Gemini API key — loaded from UserDefaults or environment.
-    var apiKey: String {
+    /// Google Cloud project ID — loaded from UserDefaults or environment.
+    var projectID: String {
         get {
-            UserDefaults.standard.string(forKey: "geminiAPIKey") ?? ProcessInfo.processInfo.environment["GEMINI_API_KEY"] ?? ""
+            UserDefaults.standard.string(forKey: "gcpProjectID") ?? ProcessInfo.processInfo.environment["GCP_PROJECT_ID"] ?? ""
         }
         set {
-            UserDefaults.standard.set(newValue, forKey: "geminiAPIKey")
+            UserDefaults.standard.set(newValue, forKey: "gcpProjectID")
         }
     }
     
-    /// Whether the API key is configured.
+    /// Whether the project is configured.
     var isConfigured: Bool {
-        !apiKey.isEmpty
+        !projectID.isEmpty
     }
     
-    /// The Gemini model to use.
-    private let model = "gemini-2.0-flash"
+    /// The Gemini model to use — 3.1 Pro Preview via Vertex AI.
+    private let model = "gemini-3.1-pro-preview"
+    
+    /// Preview models require the 'global' location.
+    private let location = "global"
     
     /// Conversation history for multi-step tasks.
     private var conversationHistory: [[String: Any]] = []
+    
+    /// Cached access token and its expiry.
+    private var cachedAccessToken: String?
+    private var tokenExpiry: Date = .distantPast
     
     /// System prompt that instructs Gemini how to analyze screens and return actions.
     private let systemPrompt = """
@@ -67,6 +77,41 @@ class AIManager {
     - If you cannot complete the task, return: {"action": "done", "summary": "Could not complete: <reason>"}
     """
     
+    // MARK: - Access Token
+    
+    /// Get a fresh Google Cloud access token using `gcloud auth print-access-token`.
+    private func getAccessToken() throws -> String {
+        // Return cached token if still valid (with 60s buffer)
+        if let token = cachedAccessToken, tokenExpiry > Date().addingTimeInterval(60) {
+            return token
+        }
+        
+        let process = Process()
+        let pipe = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["gcloud", "auth", "print-access-token"]
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        
+        try process.run()
+        process.waitUntilExit()
+        
+        guard process.terminationStatus == 0 else {
+            throw AIError.authError("gcloud auth print-access-token failed. Run: gcloud auth application-default login")
+        }
+        
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        let token = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        
+        guard !token.isEmpty else {
+            throw AIError.authError("Empty access token. Run: gcloud auth application-default login")
+        }
+        
+        cachedAccessToken = token
+        tokenExpiry = Date().addingTimeInterval(3500) // tokens last ~1h, refresh at 58min
+        return token
+    }
+    
     // MARK: - Public API
     
     /// Start a new task — clears conversation history.
@@ -85,17 +130,32 @@ class AIManager {
         completion: @escaping (Result<ControlMessage, Error>) -> Void
     ) {
         guard isConfigured else {
-            completion(.failure(AIError.noAPIKey))
+            completion(.failure(AIError.noProjectID))
             return
         }
         
-        // Build the request
-        let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent?key=\(apiKey)")!
+        // Get access token (may run gcloud CLI)
+        let accessToken: String
+        do {
+            accessToken = try getAccessToken()
+        } catch {
+            completion(.failure(error))
+            return
+        }
+        
+        // Vertex AI endpoint — preview models use 'global' region
+        let urlString = "https://\(location)-aiplatform.googleapis.com/v1beta1/projects/\(projectID)/locations/\(location)/publishers/google/models/\(model):generateContent"
+        
+        guard let url = URL(string: urlString) else {
+            completion(.failure(AIError.invalidResponse))
+            return
+        }
         
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 60
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 120  // 3.1 Pro may take longer
         
         // Build contents array with conversation history + current turn
         var contents: [[String: Any]] = []
@@ -106,8 +166,6 @@ class AIManager {
         // Build current user turn
         var parts: [[String: Any]] = []
         
-        // Add the user prompt (only on first turn, subsequent turns get
-        // "Here is the updated screenshot after the previous action")
         if conversationHistory.isEmpty {
             parts.append(["text": "Task: \(prompt)\n\nHere is the current screenshot of the PC screen. Analyze it and return the next action as JSON."])
         } else {
@@ -116,8 +174,8 @@ class AIManager {
         
         // Add the screenshot as inline_data
         parts.append([
-            "inline_data": [
-                "mime_type": "image/png",
+            "inlineData": [
+                "mimeType": "image/png",
                 "data": screenshotBase64
             ]
         ])
@@ -128,14 +186,13 @@ class AIManager {
         ])
         
         let body: [String: Any] = [
-            "system_instruction": [
+            "systemInstruction": [
                 "parts": [["text": systemPrompt]]
             ],
             "contents": contents,
             "generationConfig": [
                 "temperature": 0.1,
-                "maxOutputTokens": 500,
-                "responseMimeType": "application/json"
+                "maxOutputTokens": 500
             ]
         ]
         
@@ -150,6 +207,15 @@ class AIManager {
         URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             if let error = error {
                 completion(.failure(error))
+                return
+            }
+            
+            // Check HTTP status
+            if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 401 {
+                // Token expired — clear cache and retry
+                self?.cachedAccessToken = nil
+                self?.tokenExpiry = .distantPast
+                completion(.failure(AIError.authError("Access token expired. Will retry on next call.")))
                 return
             }
             
@@ -211,17 +277,38 @@ class AIManager {
     
     // MARK: - Action Parsing
     
+    /// Extract the first complete JSON object from a string using bracket counting.
+    private func extractFirstJSON(_ str: String) -> String? {
+        var depth = 0
+        var start = -1
+        for (i, char) in str.enumerated() {
+            if char == "{" {
+                if depth == 0 { start = i }
+                depth += 1
+            } else if char == "}" {
+                depth -= 1
+                if depth == 0 && start >= 0 {
+                    let startIdx = str.index(str.startIndex, offsetBy: start)
+                    let endIdx = str.index(str.startIndex, offsetBy: i + 1)
+                    return String(str[startIdx..<endIdx])
+                }
+            }
+        }
+        return nil
+    }
+    
     private func parseAction(_ jsonString: String) throws -> ControlMessage {
         // Clean up the response — remove markdown fences if present
         var cleaned = jsonString.trimmingCharacters(in: .whitespacesAndNewlines)
         if cleaned.hasPrefix("```") {
-            // Remove code fences
             let lines = cleaned.components(separatedBy: "\n")
             let filtered = lines.filter { !$0.hasPrefix("```") }
             cleaned = filtered.joined(separator: "\n")
         }
         
-        guard let data = cleaned.data(using: .utf8),
+        // Use bracket counting to extract the first JSON object (robust against extra text)
+        guard let jsonStr = extractFirstJSON(cleaned),
+              let data = jsonStr.data(using: .utf8),
               let dict = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let actionStr = dict["action"] as? String,
               let actionType = ActionType(rawValue: actionStr) else {
@@ -247,24 +334,27 @@ class AIManager {
 // MARK: - Errors
 
 enum AIError: LocalizedError {
-    case noAPIKey
+    case noProjectID
     case noResponse
     case invalidResponse
     case invalidAction
     case apiError(String)
+    case authError(String)
     
     var errorDescription: String? {
         switch self {
-        case .noAPIKey:
-            return "Gemini API key not configured. Set it in the app settings or GEMINI_API_KEY environment variable."
+        case .noProjectID:
+            return "GCP Project ID not configured. Set it in the app or GCP_PROJECT_ID environment variable."
         case .noResponse:
-            return "No response received from Gemini API."
+            return "No response received from Vertex AI."
         case .invalidResponse:
-            return "Could not parse Gemini API response."
+            return "Could not parse Vertex AI response."
         case .invalidAction:
             return "AI returned an invalid or unparseable action."
         case .apiError(let message):
-            return "Gemini API error: \(message)"
+            return "Vertex AI error: \(message)"
+        case .authError(let message):
+            return "Auth error: \(message)"
         }
     }
 }
