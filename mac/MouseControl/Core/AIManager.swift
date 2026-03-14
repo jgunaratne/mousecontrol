@@ -415,7 +415,41 @@ class AIManager {
             return buildActionMessage(dict: dict, actionType: actionType)
         }
         
-        print("❌ [parseAction] No valid action found in any JSON object. Full text: \(String(cleaned.prefix(500)))")
+        // Fallback: scan for {"action" marker and try parsing from there
+        print("🔵 [parseAction] Trying marker-based extraction...")
+        if let range = cleaned.range(of: "{\"action\"") ?? cleaned.range(of: "{ \"action\"") {
+            let substring = String(cleaned[range.lowerBound...])
+            // Try parsing progressively — JSONSerialization is lenient about trailing content
+            if let data = substring.data(using: .utf8) {
+                // JSONSerialization.jsonObject reads exactly one JSON object and ignores trailing data
+                // when using .fragmentsAllowed
+                if let dict = try? JSONSerialization.jsonObject(
+                    with: data,
+                    options: [.fragmentsAllowed]
+                ) as? [String: Any],
+                   let actionStr = dict["action"] as? String,
+                   let actionType = ActionType(rawValue: actionStr) {
+                    print("🔵 [parseAction] Parsed via marker extraction: \(actionType.rawValue)")
+                    return buildActionMessage(dict: dict, actionType: actionType)
+                }
+                
+                // Last resort: try to find the closing brace by trying decreasing substrings
+                let chars = Array(substring)
+                for i in stride(from: chars.count, through: 10, by: -1) {
+                    let attempt = String(chars.prefix(i))
+                    if attempt.hasSuffix("}"),
+                       let attemptData = attempt.data(using: .utf8),
+                       let dict = try? JSONSerialization.jsonObject(with: attemptData) as? [String: Any],
+                       let actionStr = dict["action"] as? String,
+                       let actionType = ActionType(rawValue: actionStr) {
+                        print("🔵 [parseAction] Parsed via truncation at \(i) chars: \(actionType.rawValue)")
+                        return buildActionMessage(dict: dict, actionType: actionType)
+                    }
+                }
+            }
+        }
+        
+        print("❌ [parseAction] No valid action found. Full text: \(String(cleaned.prefix(500)))")
         throw AIError.invalidAction
     }
     
