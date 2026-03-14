@@ -19,12 +19,12 @@ class LocalActionExecutor {
         let height = screenshot.height
         
         let bitmapRep = NSBitmapImageRep(cgImage: screenshot)
-        guard let pngData = bitmapRep.representation(using: .png, properties: [:]) else {
-            print("❌ [Local] Failed to convert screenshot to PNG")
+        guard let jpegData = bitmapRep.representation(using: .jpeg, properties: [.compressionFactor: 0.6]) else {
+            print("❌ [Local] Failed to convert screenshot to JPEG")
             return nil
         }
         
-        let base64 = pngData.base64EncodedString()
+        let base64 = jpegData.base64EncodedString()
         return (base64: base64, width: width, height: height)
     }
     

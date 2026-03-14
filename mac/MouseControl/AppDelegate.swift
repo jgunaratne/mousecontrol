@@ -366,7 +366,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         
         let originalSize = image.size
-        let maxWidth: CGFloat = 1280
+        let maxWidth: CGFloat = 1024
         
         // Only downscale if wider than maxWidth
         let scale: CGFloat
@@ -404,7 +404,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSGraphicsContext.restoreGraphicsState()
         
         // Encode as JPEG (much smaller than PNG)
-        guard let jpegData = bitmapRep.representation(using: .jpeg, properties: [.compressionFactor: 0.7]) else {
+        guard let jpegData = bitmapRep.representation(using: .jpeg, properties: [.compressionFactor: 0.5]) else {
             print("⚠️ [AIManager] Could not encode JPEG")
             return base64PNG
         }
