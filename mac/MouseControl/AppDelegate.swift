@@ -347,6 +347,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             viewModel.addLogEntry("⌨️ Key combo: \(keys)")
         case .scroll:
             viewModel.addLogEntry("🖱 Scroll (dx=\(message.scrollDeltaX ?? 0), dy=\(message.scrollDeltaY ?? 0))")
+        case .drag:
+            let sx = String(format: "%.2f", message.startX ?? 0)
+            let sy = String(format: "%.2f", message.startY ?? 0)
+            let ex = String(format: "%.2f", message.endX ?? 0)
+            let ey = String(format: "%.2f", message.endY ?? 0)
+            viewModel.addLogEntry("🖱 Drag (\(sx),\(sy)) → (\(ex),\(ey))")
         case .wait:
             viewModel.addLogEntry("⏳ Wait \(message.seconds ?? 1)s")
         case .done:
