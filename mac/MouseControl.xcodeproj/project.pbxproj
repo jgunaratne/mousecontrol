@@ -1,0 +1,407 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		28787444B61E97DF397656E5 /* ControlEvent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A74FC95DB05CCD95DEE702F5 /* ControlEvent.swift */; };
+		2D973FF3561F2C7F6487EC59 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CD5C8837A9127D97A7AC7622 /* Assets.xcassets */; };
+		7C9D7821CF93713E739D2522 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CEAE718CEC8692FDE76A47DB /* Cocoa.framework */; };
+		93E35BC17B76FB6D9D5B8D38 /* PromptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6089663773184ED8AE009AF /* PromptView.swift */; };
+		AFECF2E80CF6066F0BB5FAA0 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3910374CC6A0D7A8F79D3A1A /* AppDelegate.swift */; };
+		BA9B56952C8BF8D84F7114C1 /* AIManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D95625F9AB835FAFD3ACEEF /* AIManager.swift */; };
+		C9E1AB76AC3119FBABEC2355 /* StatusBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D15547B8A9AF2C020DFD492C /* StatusBarController.swift */; };
+		CED56E76814CACB6ED5EAA02 /* TCPManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0620B33F71E22C26E2AC7066 /* TCPManager.swift */; };
+		F93A7B3CC9D0A9AC38D35925 /* MouseControlApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DA6BB2F169BE62C6437A43E /* MouseControlApp.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		0620B33F71E22C26E2AC7066 /* TCPManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TCPManager.swift; sourceTree = "<group>"; };
+		1D95625F9AB835FAFD3ACEEF /* AIManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AIManager.swift; sourceTree = "<group>"; };
+		2968674BAE5F192F80BE3028 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		3910374CC6A0D7A8F79D3A1A /* AppDelegate.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		3DA6BB2F169BE62C6437A43E /* MouseControlApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MouseControlApp.swift; sourceTree = "<group>"; };
+		569E903F022A0015FDD9EFA1 /* MouseControl.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = MouseControl.entitlements; sourceTree = "<group>"; };
+		A74FC95DB05CCD95DEE702F5 /* ControlEvent.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ControlEvent.swift; sourceTree = "<group>"; };
+		C6089663773184ED8AE009AF /* PromptView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PromptView.swift; sourceTree = "<group>"; };
+		CD5C8837A9127D97A7AC7622 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		CEAE718CEC8692FDE76A47DB /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.15.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
+		D15547B8A9AF2C020DFD492C /* StatusBarController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StatusBarController.swift; sourceTree = "<group>"; };
+		E9FF08F5648BBCCA0B574D94 /* MouseControl.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MouseControl.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		FFAADB106CB774A28412914D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7C9D7821CF93713E739D2522 /* Cocoa.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		60C2F87BE9FC8C49EF32D838 /* OS X */ = {
+			isa = PBXGroup;
+			children = (
+				CEAE718CEC8692FDE76A47DB /* Cocoa.framework */,
+			);
+			name = "OS X";
+			sourceTree = "<group>";
+		};
+		661B58492EBDB1BC96D7C99D /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				60C2F87BE9FC8C49EF32D838 /* OS X */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		7AEE48D4A6666E9BC34A7E02 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				E9FF08F5648BBCCA0B574D94 /* MouseControl.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		B527B20E7BD7CD3D600EF5B4 /* MouseControl */ = {
+			isa = PBXGroup;
+			children = (
+				E41AA56FF396A5E71F630595 /* Core */,
+				CCDC2422154DE901723C209C /* Network */,
+				C3B565C96D280410F203F171 /* UI */,
+				3DA6BB2F169BE62C6437A43E /* MouseControlApp.swift */,
+				3910374CC6A0D7A8F79D3A1A /* AppDelegate.swift */,
+				CD5C8837A9127D97A7AC7622 /* Assets.xcassets */,
+				2968674BAE5F192F80BE3028 /* Info.plist */,
+				569E903F022A0015FDD9EFA1 /* MouseControl.entitlements */,
+			);
+			name = MouseControl;
+			path = MouseControl;
+			sourceTree = "<group>";
+		};
+		BC251E288D54BC81124EA912 = {
+			isa = PBXGroup;
+			children = (
+				7AEE48D4A6666E9BC34A7E02 /* Products */,
+				661B58492EBDB1BC96D7C99D /* Frameworks */,
+				B527B20E7BD7CD3D600EF5B4 /* MouseControl */,
+			);
+			sourceTree = "<group>";
+		};
+		C3B565C96D280410F203F171 /* UI */ = {
+			isa = PBXGroup;
+			children = (
+				C6089663773184ED8AE009AF /* PromptView.swift */,
+				D15547B8A9AF2C020DFD492C /* StatusBarController.swift */,
+			);
+			name = UI;
+			path = UI;
+			sourceTree = "<group>";
+		};
+		CCDC2422154DE901723C209C /* Network */ = {
+			isa = PBXGroup;
+			children = (
+				0620B33F71E22C26E2AC7066 /* TCPManager.swift */,
+			);
+			name = Network;
+			path = Network;
+			sourceTree = "<group>";
+		};
+		E41AA56FF396A5E71F630595 /* Core */ = {
+			isa = PBXGroup;
+			children = (
+				A74FC95DB05CCD95DEE702F5 /* ControlEvent.swift */,
+				1D95625F9AB835FAFD3ACEEF /* AIManager.swift */,
+			);
+			name = Core;
+			path = Core;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		10B7B3E8A27C8D641A18F196 /* MouseControl */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 9E67D53941690390914BE00A /* Build configuration list for PBXNativeTarget "MouseControl" */;
+			buildPhases = (
+				6B0E25E962AA6E72CD6F1089 /* Sources */,
+				FFAADB106CB774A28412914D /* Frameworks */,
+				B30AE85C2185B9C5693AFA1A /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MouseControl;
+			productName = MouseControl;
+			productReference = E9FF08F5648BBCCA0B574D94 /* MouseControl.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		8AE4B436D5CC8098BFDA7AFC /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+			};
+			buildConfigurationList = B54435F27CEDE698B97B99DB /* Build configuration list for PBXProject "MouseControl" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = BC251E288D54BC81124EA912;
+			productRefGroup = 7AEE48D4A6666E9BC34A7E02 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				10B7B3E8A27C8D641A18F196 /* MouseControl */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		B30AE85C2185B9C5693AFA1A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2D973FF3561F2C7F6487EC59 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		6B0E25E962AA6E72CD6F1089 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F93A7B3CC9D0A9AC38D35925 /* MouseControlApp.swift in Sources */,
+				AFECF2E80CF6066F0BB5FAA0 /* AppDelegate.swift in Sources */,
+				28787444B61E97DF397656E5 /* ControlEvent.swift in Sources */,
+				BA9B56952C8BF8D84F7114C1 /* AIManager.swift in Sources */,
+				CED56E76814CACB6ED5EAA02 /* TCPManager.swift in Sources */,
+				93E35BC17B76FB6D9D5B8D38 /* PromptView.swift in Sources */,
+				C9E1AB76AC3119FBABEC2355 /* StatusBarController.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		05393C297AB2559E457DC944 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_ENTITLEMENTS = MouseControl/MouseControl.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MouseControl/Info.plist;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.junius.mousecontrol;
+				PRODUCT_NAME = MouseControl;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		3508FDEDBE885976BD23EAA3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = MouseControl/MouseControl.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MouseControl/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.junius.mousecontrol;
+				PRODUCT_NAME = MouseControl;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		6D01A3D2A43D17010559CEE4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_ENTITLEMENTS = MouseControl/MouseControl.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MouseControl/Info.plist;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 1.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.junius.mousecontrol;
+				PRODUCT_NAME = MouseControl;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		C9DF0EE3AEB35646BF9AED31 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = MouseControl/MouseControl.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MouseControl/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.junius.mousecontrol;
+				PRODUCT_NAME = MouseControl;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		9E67D53941690390914BE00A /* Build configuration list for PBXNativeTarget "MouseControl" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C9DF0EE3AEB35646BF9AED31 /* Release */,
+				3508FDEDBE885976BD23EAA3 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B54435F27CEDE698B97B99DB /* Build configuration list for PBXProject "MouseControl" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				05393C297AB2559E457DC944 /* Debug */,
+				6D01A3D2A43D17010559CEE4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 8AE4B436D5CC8098BFDA7AFC /* Project object */;
+}
