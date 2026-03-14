@@ -59,11 +59,11 @@ class StatusBarController {
         let symbolName: String
         switch state {
         case .cableNotDetected:
-            symbolName = "cable.connector"
+            symbolName = "brain"
         case .waitingForCompanion:
-            symbolName = "cable.connector.horizontal"
+            symbolName = "brain.fill"
         case .connected:
-            symbolName = "cursorarrow.rays"
+            symbolName = "brain.head.profile.fill"
         case .running:
             symbolName = "brain.head.profile"
         }

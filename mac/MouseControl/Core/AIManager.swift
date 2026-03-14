@@ -7,14 +7,37 @@ import Foundation
 /// run `gcloud auth application-default login` on the Mac.
 class AIManager {
     
-    /// Google Cloud project ID — loaded from UserDefaults or environment.
+    /// Google Cloud project ID — loaded from UserDefaults, ~/.mousecontrol.env, or environment.
     var projectID: String {
         get {
-            UserDefaults.standard.string(forKey: "gcpProjectID") ?? ProcessInfo.processInfo.environment["GCP_PROJECT_ID"] ?? ""
+            if let saved = UserDefaults.standard.string(forKey: "gcpProjectID"), !saved.isEmpty {
+                return saved
+            }
+            if let envVar = ProcessInfo.processInfo.environment["GCP_PROJECT_ID"], !envVar.isEmpty {
+                return envVar
+            }
+            // Try reading from ~/.mousecontrol.env
+            return Self.readEnvFile(key: "GCP_PROJECT_ID") ?? ""
         }
         set {
             UserDefaults.standard.set(newValue, forKey: "gcpProjectID")
         }
+    }
+    
+    /// Read a key from ~/.mousecontrol.env (simple KEY=VALUE format).
+    private static func readEnvFile(key: String) -> String? {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let envPath = home.appendingPathComponent(".mousecontrol.env")
+        guard let contents = try? String(contentsOf: envPath, encoding: .utf8) else { return nil }
+        for line in contents.components(separatedBy: .newlines) {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("#") || trimmed.isEmpty { continue }
+            let parts = trimmed.split(separator: "=", maxSplits: 1)
+            if parts.count == 2 && parts[0].trimmingCharacters(in: .whitespaces) == key {
+                return parts[1].trimmingCharacters(in: .whitespaces)
+            }
+        }
+        return nil
     }
     
     /// Whether the project is configured.
