@@ -350,36 +350,45 @@ class AIManager {
     
     // MARK: - Action Parsing
     
-    /// Extract ALL complete JSON objects from a string using bracket counting.
+    /// Extract ALL complete JSON objects from a string, properly handling braces inside strings.
     private func extractAllJSON(_ str: String) -> [String] {
         var results: [String] = []
         var depth = 0
         var start = -1
+        var inString = false
+        var prevChar: Character = "\0"
+        
         for (i, char) in str.enumerated() {
-            if char == "{" {
-                if depth == 0 { start = i }
-                depth += 1
-            } else if char == "}" {
-                depth -= 1
-                if depth == 0 && start >= 0 {
-                    let startIdx = str.index(str.startIndex, offsetBy: start)
-                    let endIdx = str.index(str.startIndex, offsetBy: i + 1)
-                    results.append(String(str[startIdx..<endIdx]))
-                    start = -1
+            // Track string state (skip brackets inside quoted strings)
+            if char == "\"" && prevChar != "\\" {
+                inString = !inString
+            }
+            
+            if !inString {
+                if char == "{" {
+                    if depth == 0 { start = i }
+                    depth += 1
+                } else if char == "}" {
+                    depth -= 1
+                    if depth == 0 && start >= 0 {
+                        let startIdx = str.index(str.startIndex, offsetBy: start)
+                        let endIdx = str.index(str.startIndex, offsetBy: i + 1)
+                        results.append(String(str[startIdx..<endIdx]))
+                        start = -1
+                    }
                 }
             }
+            prevChar = char
         }
         return results
     }
     
     private func parseAction(_ jsonString: String) throws -> ControlMessage {
-        // Clean up the response — remove markdown fences if present
+        // Clean up the response — remove markdown fences anywhere in the text
         var cleaned = jsonString.trimmingCharacters(in: .whitespacesAndNewlines)
-        if cleaned.hasPrefix("```") {
-            let lines = cleaned.components(separatedBy: "\n")
-            let filtered = lines.filter { !$0.hasPrefix("```") }
-            cleaned = filtered.joined(separator: "\n")
-        }
+        let lines = cleaned.components(separatedBy: "\n")
+        let filtered = lines.filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("```") }
+        cleaned = filtered.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
         
         // Try parsing the entire text as JSON first
         if let data = cleaned.data(using: .utf8),
