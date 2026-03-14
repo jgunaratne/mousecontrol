@@ -374,122 +374,119 @@ class AIManager {
     
     // MARK: - Action Parsing
     
-    /// Extract ALL complete JSON objects from a string, properly handling braces inside strings.
-    private func extractAllJSON(_ str: String) -> [String] {
-        var results: [String] = []
-        var depth = 0
-        var start = -1
-        var inString = false
-        var prevChar: Character = "\0"
+    /// Normalize the model's action string to our ActionType enum.
+    /// Handles all common variations the model might return.
+    private func normalizeActionType(_ raw: String) -> ActionType? {
+        let lower = raw.lowercased()
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: "-", with: "")
+            .replacingOccurrences(of: " ", with: "")
         
-        for (i, char) in str.enumerated() {
-            // Track string state (skip brackets inside quoted strings)
-            if char == "\"" && prevChar != "\\" {
-                inString = !inString
-            }
+        switch lower {
+        // Click variants
+        case "click", "leftclick", "singleclick", "tap":
+            return .click
+        case "rightclick":
+            return .click  // handled via button field
+        case "doubleclick":
+            return .click  // handled via clickCount
             
-            if !inString {
-                if char == "{" {
-                    if depth == 0 { start = i }
-                    depth += 1
-                } else if char == "}" {
-                    depth -= 1
-                    if depth == 0 && start >= 0 {
-                        let startIdx = str.index(str.startIndex, offsetBy: start)
-                        let endIdx = str.index(str.startIndex, offsetBy: i + 1)
-                        results.append(String(str[startIdx..<endIdx]))
-                        start = -1
-                    }
-                }
-            }
-            prevChar = char
+        // Mouse move variants
+        case "mousemove", "move", "movemouse", "hover", "moveto":
+            return .mouseMove
+            
+        // Type / text input variants
+        case "type", "typetext", "input", "text", "write", "entertext":
+            return .type
+            
+        // Key combo variants
+        case "keycombo", "keyboard", "key", "keypress", "hotkey", "shortcut",
+             "presskey", "press", "keypresses", "keys":
+            return .keyCombo
+            
+        // Scroll variants
+        case "scroll", "scrolldown", "scrollup", "scrollleft", "scrollright":
+            return .scroll
+            
+        // Wait variants
+        case "wait", "sleep", "pause", "delay":
+            return .wait
+            
+        // Done variants
+        case "done", "complete", "finished", "stop", "end":
+            return .done
+            
+        default:
+            // Try raw value as-is
+            return ActionType(rawValue: raw)
         }
-        return results
     }
     
     private func parseAction(_ jsonString: String) throws -> ControlMessage {
-        // Clean up the response — remove markdown fences anywhere in the text
+        // Clean up the response — remove markdown fences
         var cleaned = jsonString.trimmingCharacters(in: .whitespacesAndNewlines)
         let lines = cleaned.components(separatedBy: "\n")
         let filtered = lines.filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("```") }
         cleaned = filtered.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
         
-        // Try parsing the entire text as JSON first
-        if let data = cleaned.data(using: .utf8),
-           let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let actionStr = dict["action"] as? String,
-           let actionType = ActionType(rawValue: actionStr) {
-            print("🔵 [parseAction] Parsed entire text as action: \(actionType.rawValue)")
-            return buildActionMessage(dict: dict, actionType: actionType)
-        }
-        
-        // Extract all JSON objects and find one with an "action" key
-        let jsonObjects = extractAllJSON(cleaned)
-        print("🔵 [parseAction] Found \(jsonObjects.count) JSON objects in text")
-        
-        for (index, jsonStr) in jsonObjects.enumerated() {
-            guard let data = jsonStr.data(using: .utf8),
-                  let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let actionStr = dict["action"] as? String,
-                  let actionType = ActionType(rawValue: actionStr) else {
-                print("🔵 [parseAction] JSON object \(index) is not a valid action: \(String(jsonStr.prefix(100)))")
-                continue
+        // Parse JSON
+        guard let data = cleaned.data(using: .utf8),
+              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            // Fallback: try to find JSON substring
+            if let startRange = cleaned.range(of: "{"),
+               let jsonSubstring = cleaned[startRange.lowerBound...].data(using: .utf8),
+               let dict = try? JSONSerialization.jsonObject(with: jsonSubstring, options: .fragmentsAllowed) as? [String: Any],
+               let actionStr = dict["action"] as? String,
+               let actionType = normalizeActionType(actionStr) {
+                print("🔵 [parseAction] Parsed via substring: \(actionType.rawValue)")
+                return buildActionMessage(dict: dict, actionType: actionType)
             }
-            print("🔵 [parseAction] Found action in JSON object \(index): \(actionType.rawValue)")
-            return buildActionMessage(dict: dict, actionType: actionType)
+            print("❌ [parseAction] Could not parse JSON. Text: \(String(cleaned.prefix(500)))")
+            throw AIError.parseError(cleaned)
         }
         
-        // Fallback: scan for {"action" marker and try parsing from there
-        print("🔵 [parseAction] Trying marker-based extraction...")
-        if let range = cleaned.range(of: "{\"action\"") ?? cleaned.range(of: "{ \"action\"") {
-            let substring = String(cleaned[range.lowerBound...])
-            // Try parsing progressively — JSONSerialization is lenient about trailing content
-            if let data = substring.data(using: .utf8) {
-                // JSONSerialization.jsonObject reads exactly one JSON object and ignores trailing data
-                // when using .fragmentsAllowed
-                if let dict = try? JSONSerialization.jsonObject(
-                    with: data,
-                    options: [.fragmentsAllowed]
-                ) as? [String: Any],
-                   let actionStr = dict["action"] as? String,
-                   let actionType = ActionType(rawValue: actionStr) {
-                    print("🔵 [parseAction] Parsed via marker extraction: \(actionType.rawValue)")
-                    return buildActionMessage(dict: dict, actionType: actionType)
-                }
-                
-                // Last resort: try to find the closing brace by trying decreasing substrings
-                let chars = Array(substring)
-                for i in stride(from: chars.count, through: 10, by: -1) {
-                    let attempt = String(chars.prefix(i))
-                    if attempt.hasSuffix("}"),
-                       let attemptData = attempt.data(using: .utf8),
-                       let dict = try? JSONSerialization.jsonObject(with: attemptData) as? [String: Any],
-                       let actionStr = dict["action"] as? String,
-                       let actionType = ActionType(rawValue: actionStr) {
-                        print("🔵 [parseAction] Parsed via truncation at \(i) chars: \(actionType.rawValue)")
-                        return buildActionMessage(dict: dict, actionType: actionType)
-                    }
-                }
-            }
+        guard let actionStr = dict["action"] as? String else {
+            print("❌ [parseAction] No 'action' key. Keys: \(dict.keys.sorted())")
+            throw AIError.parseError(cleaned)
         }
         
-        print("❌ [parseAction] No valid action found. Full text: \(String(cleaned.prefix(500)))")
-        throw AIError.invalidAction
+        guard let actionType = normalizeActionType(actionStr) else {
+            print("❌ [parseAction] Unknown action type: '\(actionStr)'")
+            throw AIError.parseError("Unknown action: \(actionStr) — Raw: \(String(cleaned.prefix(300)))")
+        }
+        
+        print("🔵 [parseAction] Action: \(actionType.rawValue) (from '\(actionStr)')")
+        return buildActionMessage(dict: dict, actionType: actionType)
     }
     
     private func buildActionMessage(dict: [String: Any], actionType: ActionType) -> ControlMessage {
+        // Handle doubleClick → click with count=2
+        let rawAction = (dict["action"] as? String ?? "").lowercased().replacingOccurrences(of: "_", with: "")
+        let clickCount: Int? = rawAction.contains("double") ? 2 : (dict["count"] as? Int)
+        
+        // Handle rightClick → click with button=right
+        let buttonStr = dict["button"] as? String
+        let button: MouseButton? = rawAction.contains("right") 
+            ? .right 
+            : buttonStr.flatMap { MouseButton(rawValue: $0) }
+        
+        // Handle scroll direction from action name
+        var scrollDY = dict["deltaY"] as? Double ?? dict["scrollDeltaY"] as? Double
+        if rawAction.contains("scrolldown") && scrollDY == nil { scrollDY = -3 }
+        if rawAction.contains("scrollup") && scrollDY == nil { scrollDY = 3 }
+        
         return ControlMessage.executeAction(
             action: actionType,
-            normalizedX: dict["normalizedX"] as? Double,
-            normalizedY: dict["normalizedY"] as? Double,
-            button: (dict["button"] as? String).flatMap { MouseButton(rawValue: $0) },
-            clickCount: dict["count"] as? Int,
+            normalizedX: dict["normalizedX"] as? Double ?? dict["x"] as? Double,
+            normalizedY: dict["normalizedY"] as? Double ?? dict["y"] as? Double,
+            button: button,
+            clickCount: clickCount,
             text: dict["text"] as? String,
             keys: dict["keys"] as? [String],
-            scrollDeltaX: dict["deltaX"] as? Double,
-            scrollDeltaY: dict["deltaY"] as? Double,
-            seconds: dict["seconds"] as? Double,
-            summary: dict["summary"] as? String
+            scrollDeltaX: dict["deltaX"] as? Double ?? dict["scrollDeltaX"] as? Double,
+            scrollDeltaY: scrollDY,
+            seconds: dict["seconds"] as? Double ?? dict["duration"] as? Double,
+            summary: dict["summary"] as? String ?? dict["message"] as? String
         )
     }
 }
