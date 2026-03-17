@@ -9,7 +9,7 @@ as directed by the AI agent running on the Mac.
 Dependencies:
     pip3 install mss Pillow
     sudo apt install xdotool        # X11
-    sudo apt install xclip          # for clipboard paste fallback
+    sudo apt install xclip          # strongly recommended — used for reliable text typing
 """
 
 import asyncio
@@ -146,6 +146,88 @@ def capture_screenshot() -> tuple[str, int, int]:
         raise
 
 
+# ── Modifier Key Safety ───────────────────────────────────────────────
+
+def reset_modifier_keys():
+    """Force-release all modifier keys to prevent stuck-modifier issues.
+
+    xdotool's --clearmodifiers can leave modifiers stuck if the process is
+    interrupted mid-operation or if two xdotool commands race.  This
+    function explicitly releases every modifier, which is safe to call
+    even if the keys aren't currently pressed.
+    """
+    if USE_WAYLAND:
+        return  # ydotool handles modifiers differently
+    for mod in (
+        "Shift_L", "Shift_R",
+        "Control_L", "Control_R",
+        "Alt_L", "Alt_R",
+        "Super_L", "Super_R",
+        "Meta_L", "Meta_R",
+        "Caps_Lock", "Num_Lock",
+    ):
+        subprocess.run(
+            ["xdotool", "keyup", mod],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=2,
+        )
+
+
+def _clipboard_type(text: str):
+    """Type text by copying it to the clipboard and pasting with Ctrl+V.
+
+    Much more reliable than `xdotool type` for anything longer than a
+    few characters, and avoids the --clearmodifiers stuck-key problem.
+    Falls back to xdotool type on failure.
+    """
+    if not shutil.which("xclip"):
+        # Fallback: xdotool type (without --clearmodifiers)
+        subprocess.run(
+            ["xdotool", "type", "--delay", "12", "--", text],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30,
+        )
+        return
+
+    try:
+        # Save current clipboard so we can restore it afterward.
+        old_clip = subprocess.run(
+            ["xclip", "-selection", "clipboard", "-o"],
+            capture_output=True, timeout=2,
+        ).stdout
+    except Exception:
+        old_clip = None
+
+    try:
+        # Copy desired text to clipboard.
+        proc = subprocess.Popen(
+            ["xclip", "-selection", "clipboard"],
+            stdin=subprocess.PIPE,
+        )
+        proc.communicate(input=text.encode("utf-8"), timeout=5)
+
+        # Small delay so the clipboard is ready.
+        import time
+        time.sleep(0.05)
+
+        # Paste with Ctrl+V.
+        subprocess.run(
+            ["xdotool", "key", "ctrl+v"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5,
+        )
+    finally:
+        # Restore previous clipboard content (best-effort).
+        if old_clip is not None:
+            try:
+                proc = subprocess.Popen(
+                    ["xclip", "-selection", "clipboard"],
+                    stdin=subprocess.PIPE,
+                )
+                proc.communicate(input=old_clip, timeout=5)
+            except Exception:
+                pass
+
+
 # ── Action Injection ──────────────────────────────────────────────────
 
 def inject_action(event: dict, screen_w: int, screen_h: int) -> dict:
@@ -207,7 +289,7 @@ def inject_action(event: dict, screen_w: int, screen_h: int) -> dict:
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5,
                 )
                 subprocess.run(
-                    ["xdotool", "click", "--clearmodifiers"] + repeat_flag + [button_num],
+                    ["xdotool", "click"] + repeat_flag + [button_num],
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5,
                 )
             log.info("click (%s, ×%d) → (%d, %d)", button, count, x, y)
@@ -224,11 +306,9 @@ def inject_action(event: dict, screen_w: int, screen_h: int) -> dict:
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30,
                 )
             else:
-                # Use xdotool type with --clearmodifiers to avoid modifier interference
-                subprocess.run(
-                    ["xdotool", "type", "--clearmodifiers", "--delay", "12", "--", text],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30,
-                )
+                # Use clipboard paste — much more reliable than xdotool type
+                # and avoids the --clearmodifiers stuck-key problem entirely.
+                _clipboard_type(text)
             log.info("type → '%s'", text[:50] + ("…" if len(text) > 50 else ""))
             return {"success": True}
             
@@ -274,7 +354,7 @@ def inject_action(event: dict, screen_w: int, screen_h: int) -> dict:
                 )
             else:
                 subprocess.run(
-                    ["xdotool", "key", "--clearmodifiers", combo],
+                    ["xdotool", "key", combo],
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5,
                 )
             log.info("keyCombo → %s", combo)
@@ -334,10 +414,18 @@ def inject_action(event: dict, screen_w: int, screen_h: int) -> dict:
             
     except subprocess.TimeoutExpired:
         log.error("Action timed out: %s", action)
+        reset_modifier_keys()  # Clean up after timeout
         return {"success": False, "error": f"Action timed out: {action}"}
     except Exception as exc:
         log.error("Action failed: %s — %s", action, exc)
+        reset_modifier_keys()  # Clean up after failure
         return {"success": False, "error": str(exc)}
+    finally:
+        # Defensive: always ensure no modifiers are stuck after any action.
+        try:
+            reset_modifier_keys()
+        except Exception:
+            pass
 
 
 # ── TCP Client ────────────────────────────────────────────────────────
@@ -465,6 +553,11 @@ def check_dependencies():
     else:
         if not shutil.which("xdotool"):
             missing.append("xdotool (sudo apt install xdotool)")
+        if not shutil.which("xclip"):
+            log.warning(
+                "xclip not found — text typing will fall back to xdotool type "
+                "which can cause stuck modifiers. Install with: sudo apt install xclip"
+            )
     
     # Check for screenshot dependencies
     try:
